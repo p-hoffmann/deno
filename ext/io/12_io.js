@@ -8,7 +8,6 @@ import { core, primordials } from "ext:core/mod.js";
 import {
   op_read_create_cancel_handle,
   op_read_with_cancel_handle,
-  op_set_raw,
 } from "ext:core/ops";
 const {
   Uint8Array,
@@ -172,10 +171,6 @@ class Stdin {
     return this.#readable;
   }
 
-  setRaw(mode, options = { __proto__: null }) {
-    const cbreak = !!(options.cbreak ?? false);
-    op_set_raw(this.#rid, mode, cbreak);
-  }
 
   isTerminal() {
     return core.isTerminal(this.#rid);

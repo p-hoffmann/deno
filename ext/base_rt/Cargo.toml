@@ -1,0 +1,8 @@
+[package]
+name = "base_rt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+opentelemetry = "0.27.0"

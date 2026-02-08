@@ -76,7 +76,7 @@ const { AsyncVariable, getAsyncContext, setAsyncContext } = core;
 
 export let TRACING_ENABLED = false;
 export let METRICS_ENABLED = false;
-export let PROPAGATORS: TextMapPropagator[] = [];
+export let PROPAGATORS = [];
 let ISOLATE_METRICS = false;
 
 // Note: These start at 0 in the JS library,

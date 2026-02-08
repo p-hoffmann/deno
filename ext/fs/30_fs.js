@@ -68,7 +68,7 @@ import {
   op_fs_utime_sync,
   op_fs_write_file_async,
   op_fs_write_file_sync,
-  op_set_raw,
+
 } from "ext:core/ops";
 const {
   ArrayPrototypeFilter,
@@ -696,10 +696,6 @@ class FsFile {
     return core.isTerminal(this.#rid);
   }
 
-  setRaw(mode, options = { __proto__: null }) {
-    const cbreak = !!(options.cbreak ?? false);
-    op_set_raw(this.#rid, mode, cbreak);
-  }
 
   lockSync(exclusive = false) {
     op_fs_flock_sync(this.#rid, exclusive);
