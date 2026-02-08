@@ -4033,6 +4033,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext_os"
+version = "0.1.0"
+dependencies = [
+ "deno_core",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
