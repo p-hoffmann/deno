@@ -10,6 +10,7 @@ members = [
   "ext/bundle",
   "ext/cache",
   "ext/cron",
+  "ext/ext_os",
   "ext/crypto",
   "ext/fetch",
   "ext/ffi",
@@ -121,7 +122,8 @@ deno_io = { version = "0.155.0", path = "./ext/io" }
 deno_kv = { version = "0.153.0", path = "./ext/kv" }
 deno_napi = { version = "0.176.0", path = "./ext/napi" }
 deno_net = { version = "0.237.0", path = "./ext/net" }
-deno_node = { version = "0.183.0", path = "./ext/node" }
+ext_node = { version = "0.1.0", path = "./ext/node" }
+ext_os = { version = "0.1.0", path = "./ext/ext_os" }
 deno_node_crypto = { version = "0.15.0", path = "./ext/node_crypto" }
 deno_node_sqlite = { version = "0.15.0", path = "./ext/node_sqlite" }
 deno_os = { version = "0.62.0", path = "./ext/os" }
@@ -527,7 +529,7 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.deno_net]
 opt-level = 3
-[profile.release.package.deno_node]
+[profile.release.package.ext_node]
 opt-level = 3
 [profile.release.package.deno_runtime]
 opt-level = 3
