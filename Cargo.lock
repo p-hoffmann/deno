@@ -3984,6 +3984,7 @@ dependencies = [
  "lazy-regex",
  "libc",
  "libz-sys",
+ "log",
  "md-5",
  "md4",
  "memchr",
