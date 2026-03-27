@@ -225,41 +225,23 @@ where
 }
 
 #[op2(fast, stack_trace)]
-pub fn op_geteuid<P>(state: &mut OpState) -> Result<u32, PermissionCheckError>
+pub fn op_geteuid<P>(
+  _state: &mut OpState,
+) -> Result<u32, PermissionCheckError>
 where
   P: NodePermissions + 'static,
 {
-  {
-    let permissions = state.borrow_mut::<P>();
-    permissions.check_sys("uid", "node:os.geteuid()")?;
-  }
-
-  #[cfg(windows)]
-  let euid = 0;
-  #[cfg(unix)]
-  // SAFETY: Call to libc geteuid.
-  let euid = unsafe { libc::geteuid() };
-
-  Ok(euid)
+  Ok(0)
 }
 
 #[op2(fast, stack_trace)]
-pub fn op_getegid<P>(state: &mut OpState) -> Result<u32, PermissionCheckError>
+pub fn op_getegid<P>(
+  _state: &mut OpState,
+) -> Result<u32, PermissionCheckError>
 where
   P: NodePermissions + 'static,
 {
-  {
-    let permissions = state.borrow_mut::<P>();
-    permissions.check_sys("getegid", "node:os.getegid()")?;
-  }
-
-  #[cfg(windows)]
-  let egid = 0;
-  #[cfg(unix)]
-  // SAFETY: Call to libc getegid.
-  let egid = unsafe { libc::getegid() };
-
-  Ok(egid)
+  Ok(0)
 }
 
 #[op2(stack_trace)]

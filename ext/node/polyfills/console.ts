@@ -1,24 +1,12 @@
 // Copyright 2018-2025 the Deno authors. MIT license.
 
-import { primordials } from "ext:core/mod.js";
 import { Console } from "ext:deno_node/internal/console/constructor.mjs";
-import { windowOrWorkerGlobalScope } from "ext:runtime/98_global_scope_shared.js";
-// Don't rely on global `console` because during bootstrapping, it is pointing
-// to native `console` object provided by V8.
-const console = windowOrWorkerGlobalScope.console.value;
+import * as DenoConsole from "ext:deno_console/01_console.js";
+import { core } from "ext:core/mod.js";
 
-const { ObjectDefineProperty, ObjectHasOwn } = primordials;
+const console = new DenoConsole.Console((msg, level) => core.print(msg, level > 1));
 
-if (!ObjectHasOwn(console, "Console")) {
-  ObjectDefineProperty(console, "Console", {
-    value: Console,
-    writable: true,
-    enumerable: false,
-    configurable: true,
-  });
-}
-
-export default console;
+export default Object.assign(console, { Console });
 
 export { Console };
 export const {
