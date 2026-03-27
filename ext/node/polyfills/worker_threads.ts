@@ -2,7 +2,12 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 
 import { core, internals, primordials } from "ext:core/mod.js";
-import { unrefParentPort } from "ext:deno_web/13_message_port.js";
+import {
+  MessageChannel,
+  MessagePort,
+  unrefParentPort,
+} from "ext:deno_web/13_message_port.js";
+import { BroadcastChannel } from "ext:deno_broadcast_channel/01_broadcast_channel.js";
 import { notImplemented } from "ext:deno_node/_utils.ts";
 import { EventEmitter } from "node:events";
 import process from "node:process";
@@ -39,6 +44,10 @@ export interface WorkerOptions {
   name?: string;
 }
 
+let nextWorkerThreadId = 1;
+const activeWorkers = new SafeMap();
+const originalProcessExit = process.exit;
+
 const privateWorkerRef = Symbol("privateWorkerRef");
 class NodeWorker extends EventEmitter {
   #id = 0;
@@ -48,6 +57,7 @@ class NodeWorker extends EventEmitter {
   #controlPromise = undefined;
   // "RUNNING" | "CLOSED" | "TERMINATED"
   #status = "RUNNING";
+  #hostPort;
 
   // https://nodejs.org/api/worker_threads.html#workerthreadid
   threadId = this.#id;
@@ -61,9 +71,120 @@ class NodeWorker extends EventEmitter {
     stackSizeMb: 4,
   };
 
-  constructor(_specifier: URL | string, _options?: WorkerOptions) {
+  constructor(specifier: URL | string, options?: WorkerOptions) {
     super();
-    notImplemented("Worker.prototype.constructor");
+
+    this.#id = nextWorkerThreadId++;
+    this.threadId = this.#id;
+    this.#name = options?.name ?? "";
+
+    // Create message channel for host <-> worker communication
+    const channel = new MessageChannel();
+    this.#hostPort = channel.port1;
+    const workerPort = channel.port2;
+
+    // Wire host port to emit events on this NodeWorker instance
+    this.#hostPort.onmessage = (ev) => {
+      if (this.#status !== "TERMINATED") {
+        this.emit("message", ev.data);
+      }
+    };
+
+    // Resolve the specifier to a URL
+    let moduleUrl: string;
+    if (options?.eval) {
+      // deno-lint-ignore prefer-primordials
+      const code = typeof specifier === "string"
+        ? specifier
+        // deno-lint-ignore prefer-primordials
+        : specifier.toString();
+      // Use encodeURIComponent for data: URI (handles newlines, special chars)
+      moduleUrl = `data:text/javascript,${encodeURIComponent(code)}`;
+    } else if (typeof specifier === "object") {
+      // deno-lint-ignore prefer-primordials
+      moduleUrl = specifier.toString();
+    } else {
+      // String path — resolve relative to cwd
+      // deno-lint-ignore prefer-primordials
+      if (specifier.startsWith("file://") || specifier.startsWith("data:")) {
+        moduleUrl = specifier;
+      } else {
+        moduleUrl = new URL(specifier, `file://${Deno.cwd()}/`).href;
+      }
+    }
+
+    // Append unique query param to bust module cache for file URLs
+    // deno-lint-ignore prefer-primordials
+    if (!moduleUrl.startsWith("data:")) {
+      const sep = moduleUrl.includes("?") ? "&" : "?";
+      moduleUrl = `${moduleUrl}${sep}__workerId=${this.#id}`;
+    }
+
+    // Save main thread module-level state
+    const savedParentPort = parentPort;
+    const savedWorkerData = workerData;
+    const savedThreadId = threadId;
+    const savedIsMainThread = isMainThread;
+    const savedEnvironmentData = environmentData;
+
+    // Set up worker context: mutate module-level state
+    const workerParentPort = createParentPortAdapter(workerPort);
+    parentPort = workerParentPort;
+    workerData = options?.workerData ?? null;
+    threadId = this.#id;
+    isMainThread = false;
+    environmentData = new SafeMap(savedEnvironmentData);
+
+    // Handle env option
+    const savedEnv = process.env;
+    if (options?.env && options.env !== SHARE_ENV) {
+      process.env = options.env;
+    }
+
+    // Update default export to reflect worker state
+    defaultExport.parentPort = parentPort;
+    defaultExport.workerData = workerData;
+    defaultExport.threadId = threadId;
+    defaultExport.isMainThread = false;
+
+    // Register for process.exit sandboxing
+    activeWorkers.set(this.#id, this);
+    if (activeWorkers.size === 1) {
+      process.exit = ((code) => {
+        if (activeWorkers.size > 0 && !isMainThread) {
+          // Worker called process.exit — terminate all active workers
+          for (const [, w] of activeWorkers) {
+            w.terminate();
+          }
+        } else {
+          originalProcessExit(code);
+        }
+      }) as typeof process.exit;
+    }
+
+    const restoreMainState = () => {
+      parentPort = savedParentPort;
+      workerData = savedWorkerData;
+      threadId = savedThreadId;
+      isMainThread = savedIsMainThread;
+      environmentData = savedEnvironmentData;
+      if (options?.env && options.env !== SHARE_ENV) {
+        process.env = savedEnv;
+      }
+      defaultExport.parentPort = savedParentPort;
+      defaultExport.workerData = savedWorkerData;
+      defaultExport.threadId = savedThreadId;
+      defaultExport.isMainThread = savedIsMainThread;
+    };
+
+    // Import the worker module
+    import(moduleUrl).then(() => {
+      restoreMainState();
+      this.emit("online");
+    }).catch((err) => {
+      restoreMainState();
+      this.emit("error", err);
+    });
   }
 
   [privateWorkerRef](ref) {
@@ -90,7 +211,8 @@ class NodeWorker extends EventEmitter {
     }
   }
 
-  #handleError(_err) {
+  #handleError(err) {
+    this.emit("error", err);
   }
 
   #pollControl = async () => {
@@ -100,12 +222,23 @@ class NodeWorker extends EventEmitter {
   };
 
   postMessage(message, transferOrOptions = {}) {
-    notImplemented("Worker.prototype.postMessage");
+    if (this.#status === "RUNNING") {
+      this.#hostPort.postMessage(message, transferOrOptions);
+    }
   }
 
   // https://nodejs.org/api/worker_threads.html#workerterminate
   terminate() {
-    notImplemented("Worker.prototype.terminate");
+    if (this.#status !== "TERMINATED") {
+      this.#status = "TERMINATED";
+      try { this.#hostPort.close(); } catch { /* ignore */ }
+      activeWorkers.delete(this.#id);
+      if (activeWorkers.size === 0) {
+        process.exit = originalProcessExit;
+      }
+      queueMicrotask(() => this.emit("exit", 0));
+    }
+    return PromiseResolve(0);
   }
 
   ref() {
@@ -150,6 +283,67 @@ type ParentPort = typeof self & NodeEventTarget;
 // deno-lint-ignore no-explicit-any
 let parentPort: ParentPort = null as any;
 
+// Creates a Node-style parentPort adapter from a raw MessagePort
+function createParentPortAdapter(port: MessagePort) {
+  const listeners = new SafeWeakMap<
+    // deno-lint-ignore no-explicit-any
+    (...args: any[]) => void,
+    // deno-lint-ignore no-explicit-any
+    (ev: any) => any
+  >();
+
+  const adapter = {
+    postMessage(message, transferOrOptions?) {
+      port.postMessage(message, transferOrOptions);
+    },
+    off(name, listener) {
+      port.removeEventListener(name, listeners.get(listener)!);
+      listeners.delete(listener);
+      return adapter;
+    },
+    on(name, listener) {
+      // deno-lint-ignore no-explicit-any
+      const _listener = (ev: any) => {
+        const message = ev.data;
+        return listener(message);
+      };
+      listeners.set(listener, _listener);
+      port.addEventListener(name, _listener);
+      return adapter;
+    },
+    once(name, listener) {
+      // deno-lint-ignore no-explicit-any
+      const _listener = (ev: any) => listener(ev.data);
+      listeners.set(listener, _listener);
+      port.addEventListener(name, _listener, { once: true });
+      return adapter;
+    },
+    removeListener(name, listener) {
+      return adapter.off(name, listener);
+    },
+    addListener(name, listener) {
+      return adapter.on(name, listener);
+    },
+    setMaxListeners() {},
+    getMaxListeners() { return Infinity; },
+    eventNames() { return [""]; },
+    listenerCount() { return 0; },
+    emit() { return notImplemented("parentPort.emit"); },
+    removeAllListeners() {
+      return notImplemented("parentPort.removeAllListeners");
+    },
+    close() { port.close(); },
+    ref() {},
+    unref() {},
+    [unrefParentPort]: false,
+  };
+
+  // Start the port so queued messages are delivered
+  port.start();
+
+  return adapter;
+}
+
 internals.__initWorkerThreads = (
   runningOnMainThread: boolean,
   workerId,
@@ -190,8 +384,6 @@ internals.__initWorkerThreads = (
     defaultExport.parentPort = parentPort;
     defaultExport.threadId = threadId;
 
-    patchMessagePortIfFound(workerData);
-
     parentPort.off = parentPort.removeListener = function (
       this: ParentPort,
       name,
@@ -209,7 +401,6 @@ internals.__initWorkerThreads = (
       // deno-lint-ignore no-explicit-any
       const _listener = (ev: any) => {
         const message = ev.data;
-        patchMessagePortIfFound(message);
         return listener(message);
       };
       listeners.set(listener, _listener);
@@ -270,36 +461,20 @@ export function receiveMessageOnPort(_port: MessagePort) {
   notImplemented("receiveMessageOnPort");
 }
 
-class NodeMessagePort extends EventTarget {
-  constructor() {
-    super();
-    notImplemented("MessagePort.prototype.constructor");
-  }
-}
-
-class NodeBroadcastChannel extends EventTarget {
-  constructor(_name) {
-    super();
-    notImplemented("BroadcastChannel.prototype.constructor");
-  }
-}
-
 class NodeMessageChannel {
   port1: MessagePort;
   port2: MessagePort;
 
   constructor() {
-    notImplemented("MessageChannel.prototype.constructor");
+    const mc = new MessageChannel();
+    this.port1 = mc.port1;
+    this.port2 = mc.port2;
   }
 }
 
-// deno-lint-ignore no-explicit-any
-function patchMessagePortIfFound(_data: any) {
-}
-
 export {
-  NodeBroadcastChannel as BroadcastChannel,
-  NodeMessagePort as MessagePort,
+  BroadcastChannel,
+  MessagePort,
   NodeMessageChannel as MessageChannel,
   NodeWorker as Worker,
   parentPort,
@@ -311,9 +486,9 @@ const defaultExport = {
   markAsUntransferable,
   moveMessagePortToContext,
   receiveMessageOnPort,
-  MessagePort: NodeMessagePort,
+  MessagePort,
   MessageChannel: NodeMessageChannel,
-  BroadcastChannel: NodeBroadcastChannel,
+  BroadcastChannel,
   Worker: NodeWorker,
   getEnvironmentData,
   setEnvironmentData,
