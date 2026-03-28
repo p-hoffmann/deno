@@ -15,7 +15,6 @@ members = [
   "ext/canvas",
   "ext/console",
   "ext/cron",
-  "ext/ext_os",
   "ext/crypto",
   "ext/fetch",
   "ext/ffi",
@@ -106,7 +105,6 @@ deno_kv = { version = "0.129.0", path = "./ext/kv" }
 deno_napi = { version = "0.152.0", path = "./ext/napi" }
 deno_net = { version = "0.213.0", path = "./ext/net" }
 ext_node = { version = "0.1.0", path = "./ext/node" }
-ext_os = { version = "0.1.0", path = "./ext/ext_os" }
 deno_os = { version = "0.38.0", path = "./ext/os" }
 deno_process = { version = "0.36.0", path = "./ext/process" }
 deno_signals = { version = "0.12.0", path = "./ext/signals" }

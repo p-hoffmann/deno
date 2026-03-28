@@ -3984,7 +3984,6 @@ dependencies = [
  "lazy-regex",
  "libc",
  "libz-sys",
- "log",
  "md-5",
  "md4",
  "memchr",
@@ -4031,13 +4030,6 @@ dependencies = [
  "x25519-dalek",
  "x509-parser",
  "yoke 0.7.4",
-]
-
-[[package]]
-name = "ext_os"
-version = "0.1.0"
-dependencies = [
- "deno_core",
 ]
 
 [[package]]

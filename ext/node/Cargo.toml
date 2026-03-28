@@ -52,7 +52,6 @@ hyper-util.workspace = true
 indexmap.workspace = true
 lazy-regex.workspace = true
 libc.workspace = true
-log.workspace = true
 libz-sys.workspace = true
 num-bigint.workspace = true
 once_cell.workspace = true
