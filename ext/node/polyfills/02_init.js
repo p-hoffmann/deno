@@ -12,6 +12,7 @@ import {
   streamBaseState,
 } from "ext:deno_node/internal_binding/stream_wrap.ts";
 import "node:module";
+import "node:worker_threads";
 
 let initialized = false;
 

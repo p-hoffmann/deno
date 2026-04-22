@@ -26,6 +26,8 @@ use node_resolver::IsBuiltInNodeModuleChecker;
 use node_resolver::NpmPackageFolderResolver;
 use node_resolver::PackageJsonResolverRc;
 use node_resolver::errors::PackageJsonLoadError;
+use once_cell::sync::Lazy;
+use sys_traits::FsMetadataValue;
 
 extern crate libz_sys as zlib;
 
@@ -328,8 +330,7 @@ deno_core::extension!(deno_node,
     ops::util::op_node_call_is_from_dependency<TInNpmPackageChecker, TNpmPackageFolderResolver, TSys>,
     ops::util::op_node_in_npm_package<TInNpmPackageChecker, TNpmPackageFolderResolver, TSys>,
     ops::util::op_node_parse_env,
-    ops::worker_threads::op_worker_threads_filename<TSys>,
-    ops::worker_threads::op_worker_get_resource_limits,
+    // Worker threads ops disabled in trex runtime.
     ops::ipc::op_node_child_ipc_pipe,
     ops::ipc::op_node_ipc_write_json,
     ops::ipc::op_node_ipc_read_json,
@@ -635,12 +636,13 @@ deno_core::extension!(deno_node,
   options = {
     maybe_init: Option<NodeExtInitServices<TInNpmPackageChecker, TNpmPackageFolderResolver, TSys>>,
     fs: deno_fs::FileSystemRc,
+    sys: TSys,
   },
   state = |state, options| {
     state.put(options.fs.clone());
+    state.put(options.sys.clone());
 
     if let Some(init) = &options.maybe_init {
-      state.put(init.sys.clone());
       state.put(init.node_require_loader.clone());
       state.put(init.node_resolver.clone());
       state.put(init.pkg_json_resolver.clone());
@@ -763,6 +765,259 @@ deno_core::extension!(deno_node,
     ext.external_references.to_mut().extend(external_references);
   },
 );
+
+#[derive(Debug, Clone)]
+pub struct DenoFsNodeResolverEnv {
+  fs: deno_fs::FileSystemRc,
+}
+
+impl DenoFsNodeResolverEnv {
+  pub fn new(fs: deno_fs::FileSystemRc) -> Self {
+    Self { fs }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct DenoFsMetadata {
+  is_file: bool,
+  is_directory: bool,
+  #[allow(dead_code)]
+  is_symlink: bool,
+}
+
+impl sys_traits::FsMetadataValue for DenoFsMetadata {
+  fn file_type(&self) -> sys_traits::FileType {
+    if self.is_file {
+      sys_traits::FileType::File
+    } else if self.is_directory {
+      sys_traits::FileType::Dir
+    } else {
+      sys_traits::FileType::Symlink
+    }
+  }
+
+  fn len(&self) -> u64 {
+    0
+  }
+
+  fn accessed(&self) -> std::io::Result<std::time::SystemTime> {
+    Err(std::io::Error::new(
+      std::io::ErrorKind::Unsupported,
+      "accessed time not supported",
+    ))
+  }
+
+  fn created(&self) -> std::io::Result<std::time::SystemTime> {
+    Err(std::io::Error::new(
+      std::io::ErrorKind::Unsupported,
+      "created time not supported",
+    ))
+  }
+
+  fn modified(&self) -> std::io::Result<std::time::SystemTime> {
+    Err(std::io::Error::new(
+      std::io::ErrorKind::Unsupported,
+      "modified time not supported",
+    ))
+  }
+
+  fn changed(&self) -> std::io::Result<std::time::SystemTime> {
+    Err(std::io::Error::new(
+      std::io::ErrorKind::Unsupported,
+      "changed time not supported",
+    ))
+  }
+
+  fn dev(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn ino(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn mode(&self) -> std::io::Result<u32> {
+    Ok(0)
+  }
+
+  fn nlink(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn uid(&self) -> std::io::Result<u32> {
+    Ok(0)
+  }
+
+  fn gid(&self) -> std::io::Result<u32> {
+    Ok(0)
+  }
+
+  fn rdev(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn blksize(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn blocks(&self) -> std::io::Result<u64> {
+    Ok(0)
+  }
+
+  fn is_block_device(&self) -> std::io::Result<bool> {
+    Ok(false)
+  }
+
+  fn is_char_device(&self) -> std::io::Result<bool> {
+    Ok(false)
+  }
+
+  fn is_fifo(&self) -> std::io::Result<bool> {
+    Ok(false)
+  }
+
+  fn is_socket(&self) -> std::io::Result<bool> {
+    Ok(false)
+  }
+
+  fn file_attributes(&self) -> std::io::Result<u32> {
+    Ok(0)
+  }
+}
+
+#[derive(Debug)]
+pub struct DenoFsDirEntry {
+  name: String,
+  metadata: DenoFsMetadata,
+  parent_path: std::path::PathBuf,
+}
+
+impl sys_traits::FsDirEntry for DenoFsDirEntry {
+  type Metadata = DenoFsMetadata;
+
+  fn file_name(&self) -> Cow<std::ffi::OsStr> {
+    Cow::Borrowed(std::ffi::OsStr::new(&self.name))
+  }
+
+  fn file_type(&self) -> std::io::Result<sys_traits::FileType> {
+    Ok(self.metadata.file_type())
+  }
+
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
+    Ok(self.metadata.clone())
+  }
+
+  fn path(&self) -> Cow<'_, Path> {
+    Cow::Owned(self.parent_path.join(&self.name))
+  }
+}
+
+impl sys_traits::BaseFsRead for DenoFsNodeResolverEnv {
+  fn base_fs_read(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
+    self
+      .fs
+      .read_file_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .map(|bytes| Cow::Owned(bytes.into_owned()))
+      .map_err(|err| err.into_io_error())
+  }
+}
+
+impl sys_traits::BaseFsMetadata for DenoFsNodeResolverEnv {
+  type Metadata = DenoFsMetadata;
+
+  fn base_fs_metadata(&self, path: &Path) -> std::io::Result<Self::Metadata> {
+    self
+      .fs
+      .stat_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .map(|stat| DenoFsMetadata {
+        is_file: stat.is_file,
+        is_directory: stat.is_directory,
+        is_symlink: stat.is_symlink,
+      })
+      .map_err(|err| err.into_io_error())
+  }
+
+  fn base_fs_symlink_metadata(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<Self::Metadata> {
+    self
+      .fs
+      .lstat_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .map(|stat| DenoFsMetadata {
+        is_file: stat.is_file,
+        is_directory: stat.is_directory,
+        is_symlink: stat.is_symlink,
+      })
+      .map_err(|err| err.into_io_error())
+  }
+}
+
+impl sys_traits::BaseFsCanonicalize for DenoFsNodeResolverEnv {
+  fn base_fs_canonicalize(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<std::path::PathBuf> {
+    self
+      .fs
+      .realpath_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .map_err(|err| err.into_io_error())
+  }
+}
+
+impl sys_traits::BaseFsReadDir for DenoFsNodeResolverEnv {
+  type ReadDirEntry = DenoFsDirEntry;
+
+  fn base_fs_read_dir(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+  > {
+    let entries = self
+      .fs
+      .read_dir_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .map_err(|err| err.into_io_error())?;
+
+    let parent_path = path.to_path_buf();
+    let fs = self.fs.clone();
+
+    let iter = entries.into_iter().map(move |entry| {
+      let entry_path = parent_path.join(&entry.name);
+      let stat = fs
+        .stat_sync(&CheckedPath::unsafe_new(Cow::Borrowed(&entry_path)))
+        .map_err(|err| err.into_io_error())?;
+
+      Ok(DenoFsDirEntry {
+        name: entry.name,
+        metadata: DenoFsMetadata {
+          is_file: stat.is_file,
+          is_directory: stat.is_directory,
+          is_symlink: stat.is_symlink,
+        },
+        parent_path: parent_path.clone(),
+      })
+    });
+
+    Ok(Box::new(iter))
+  }
+}
+
+impl sys_traits::EnvCurrentDir for DenoFsNodeResolverEnv {
+  #[allow(clippy::disallowed_methods)]
+  fn env_current_dir(&self) -> std::io::Result<std::path::PathBuf> {
+    std::env::current_dir()
+  }
+}
+
+impl sys_traits::BaseEnvVar for DenoFsNodeResolverEnv {
+  fn base_env_var_os(
+    &self,
+    key: &std::ffi::OsStr,
+  ) -> Option<std::ffi::OsString> {
+    std::env::var_os(key)
+  }
+}
 
 #[sys_traits::auto_impl]
 pub trait ExtNodeSys:
