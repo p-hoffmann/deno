@@ -7,9 +7,16 @@ import { windowOrWorkerGlobalScope } from "ext:runtime/98_global_scope_shared.js
 // to native `console` object provided by V8.
 const console = windowOrWorkerGlobalScope.console.value;
 
-const { ObjectAssign } = primordials;
+const { ObjectDefineProperty, ObjectHasOwn } = primordials;
 
-ObjectAssign(console, { Console });
+if (!ObjectHasOwn(console, "Console")) {
+  ObjectDefineProperty(console, "Console", {
+    value: Console,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
+}
 
 export default console;
 

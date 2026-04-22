@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use boxed_error::Boxed;
 use deno_cache_dir::GlobalHttpCacheRc;
 use deno_cache_dir::GlobalHttpCacheSys;
+
+use crate::loader;
 use deno_cache_dir::HttpCacheRc;
 use deno_cache_dir::file_fetcher::AuthTokens;
 use deno_cache_dir::file_fetcher::BlobStore;
@@ -165,12 +167,26 @@ impl<
     options: PermissionedFileFetcherOptions,
   ) -> Self {
     let auth_tokens = AuthTokens::new_from_sys(&sys);
+    #[allow(clippy::disallowed_types)]
+    let memory_files_arc: std::sync::Arc<
+      dyn deno_cache_dir::file_fetcher::MemoryFiles,
+    > = {
+      let cloned = memory_files.clone();
+      let raw_ptr: *const loader::MemoryFiles =
+        deno_maybe_sync::MaybeArc::into_raw(cloned);
+      unsafe {
+        std::sync::Arc::from_raw(
+          raw_ptr as *const dyn deno_cache_dir::file_fetcher::MemoryFiles,
+        )
+      }
+    };
+
     let file_fetcher = deno_cache_dir::file_fetcher::FileFetcher::new(
       blob_store,
       sys,
       http_cache,
       http_client,
-      memory_files.clone(),
+      memory_files_arc,
       deno_cache_dir::file_fetcher::FileFetcherOptions {
         allow_remote: options.allow_remote,
         cache_setting: options.cache_setting,

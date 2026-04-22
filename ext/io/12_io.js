@@ -5,7 +5,6 @@
 // Thank you! We love Go! <3
 
 import { core, primordials } from "ext:core/mod.js";
-import { op_set_raw } from "ext:core/ops";
 const {
   Uint8Array,
   ArrayPrototypePush,
@@ -149,10 +148,6 @@ class Stdin {
     return this.#readable;
   }
 
-  setRaw(mode, options = { __proto__: null }) {
-    const cbreak = !!(options.cbreak ?? false);
-    op_set_raw(this.#rid, mode, cbreak);
-  }
 
   isTerminal() {
     return core.isTerminal(this.#rid);
