@@ -38,8 +38,8 @@ use deno_fs::FileSystem;
 use deno_io::Stdio;
 use deno_kv::dynamic::MultiBackendDbHandler;
 use deno_napi::DenoRtNativeAddonLoaderRc;
-use deno_node::ExtNodeSys;
-use deno_node::NodeExtInitServices;
+use ext_node::ExtNodeSys;
+use ext_node::NodeExtInitServices;
 use deno_os::ExitCode;
 use deno_permissions::PermissionsContainer;
 use deno_process::NpmProcessStateProviderRc;
@@ -573,8 +573,9 @@ impl MainWorker {
         deno_io::deno_io::args(Some(options.stdio)),
         deno_fs::deno_fs::args(services.fs.clone()),
         deno_os::deno_os::args(Some(exit_code.clone())),
+        ext_os::os::args(),
         deno_process::deno_process::args(services.npm_process_state_provider),
-        deno_node::deno_node::args::<
+        ext_node::deno_node::args::<
           TInNpmPackageChecker,
           TNpmPackageFolderResolver,
           TExtNodeSys,
@@ -729,7 +730,7 @@ impl MainWorker {
       let mut state = op_state.borrow_mut();
       state.put(options.clone());
       if let Some((fd, serialization)) = options.node_ipc_init {
-        state.put(deno_node::ChildPipeFd(fd, serialization));
+        state.put(ext_node::ChildPipeFd(fd, serialization));
       }
     }
 
@@ -1088,10 +1089,11 @@ fn common_extensions<
     deno_io::deno_io::lazy_init(),
     deno_fs::deno_fs::lazy_init(),
     deno_os::deno_os::lazy_init(),
+    ext_os::os::lazy_init(),
     deno_process::deno_process::lazy_init(),
     deno_node_crypto::deno_node_crypto::init(),
     deno_node_sqlite::deno_node_sqlite::init(),
-    deno_node::deno_node::lazy_init::<
+    ext_node::deno_node::lazy_init::<
       TInNpmPackageChecker,
       TNpmPackageFolderResolver,
       TExtNodeSys,

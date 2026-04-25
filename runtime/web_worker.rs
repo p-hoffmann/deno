@@ -43,8 +43,8 @@ use deno_fs::FileSystem;
 use deno_io::Stdio;
 use deno_kv::dynamic::MultiBackendDbHandler;
 use deno_napi::DenoRtNativeAddonLoaderRc;
-use deno_node::ExtNodeSys;
-use deno_node::NodeExtInitServices;
+use ext_node::ExtNodeSys;
+use ext_node::NodeExtInitServices;
 use deno_permissions::PermissionsContainer;
 use deno_process::NpmProcessStateProviderRc;
 use deno_terminal::colors;
@@ -573,10 +573,11 @@ impl WebWorker {
       deno_io::deno_io::init(Some(options.stdio)),
       deno_fs::deno_fs::init(services.fs.clone()),
       deno_os::deno_os::init(Some(deno_os::ExitCode::default())),
+      ext_os::os::init(),
       deno_process::deno_process::init(services.npm_process_state_provider),
       deno_node_crypto::deno_node_crypto::init(),
       deno_node_sqlite::deno_node_sqlite::init(),
-      deno_node::deno_node::init::<
+      ext_node::deno_node::init::<
         TInNpmPackageChecker,
         TNpmPackageFolderResolver,
         TExtNodeSys,

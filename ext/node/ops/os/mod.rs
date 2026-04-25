@@ -221,6 +221,7 @@ pub fn op_node_os_user_info(
   get_user_info(uid)
 }
 
+#[op2(fast, stack_trace)]
 pub fn op_geteuid(_state: &mut OpState) -> Result<u32, PermissionCheckError> {
   // Sandboxed: always report root-equivalent uid; do not leak host identity.
   Ok(0)
