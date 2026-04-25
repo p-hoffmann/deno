@@ -44,10 +44,11 @@ pub fn create_runtime_snapshot(
     deno_io::deno_io::lazy_init(),
     deno_fs::deno_fs::lazy_init(),
     deno_os::deno_os::lazy_init(),
+    ext_os::os::lazy_init(),
     deno_process::deno_process::lazy_init(),
     deno_node_crypto::deno_node_crypto::lazy_init(),
     deno_node_sqlite::deno_node_sqlite::lazy_init(),
-    deno_node::deno_node::lazy_init::<
+    ext_node::deno_node::lazy_init::<
       DenoInNpmPackageChecker,
       NpmResolver<sys_traits::impls::RealSys>,
       sys_traits::impls::RealSys,
@@ -77,17 +78,17 @@ pub fn create_runtime_snapshot(
         let isolate = rt.v8_isolate();
         v8::scope!(scope, isolate);
 
-        let tmpl = deno_node::init_global_template(
+        let tmpl = ext_node::init_global_template(
           scope,
-          deno_node::ContextInitMode::ForSnapshot,
+          ext_node::ContextInitMode::ForSnapshot,
         );
-        let ctx = deno_node::create_v8_context(
+        let ctx = ext_node::create_v8_context(
           scope,
           tmpl,
-          deno_node::ContextInitMode::ForSnapshot,
+          ext_node::ContextInitMode::ForSnapshot,
           std::ptr::null_mut(),
         );
-        assert_eq!(scope.add_context(ctx), deno_node::VM_CONTEXT_INDEX);
+        assert_eq!(scope.add_context(ctx), ext_node::VM_CONTEXT_INDEX);
       })),
       skip_op_registration: false,
     },

@@ -7,7 +7,7 @@ import {
   MessagePort,
   unrefParentPort,
 } from "ext:deno_web/13_message_port.js";
-import { BroadcastChannel } from "ext:deno_broadcast_channel/01_broadcast_channel.js";
+import { BroadcastChannel } from "ext:deno_web/01_broadcast_channel.js";
 import { notImplemented } from "ext:deno_node/_utils.ts";
 import { EventEmitter } from "node:events";
 import process from "node:process";
@@ -104,7 +104,7 @@ class NodeWorker extends EventEmitter {
       // deno-lint-ignore prefer-primordials
       moduleUrl = specifier.toString();
     } else {
-      // String path — resolve relative to cwd
+      // String path - resolve relative to cwd
       // deno-lint-ignore prefer-primordials
       if (specifier.startsWith("file://") || specifier.startsWith("data:")) {
         moduleUrl = specifier;
@@ -152,7 +152,7 @@ class NodeWorker extends EventEmitter {
     if (activeWorkers.size === 1) {
       process.exit = ((code) => {
         if (activeWorkers.size > 0 && !isMainThread) {
-          // Worker called process.exit — terminate all active workers
+          // Worker called process.exit - terminate all active workers
           for (const [, w] of activeWorkers) {
             w.terminate();
           }

@@ -14,7 +14,7 @@ pub use deno_io;
 pub use deno_kv;
 pub use deno_napi;
 pub use deno_net;
-pub use deno_node;
+pub use ext_node as deno_node;
 pub use deno_os;
 pub use deno_permissions;
 pub use deno_process;
