@@ -1072,6 +1072,8 @@ function wrapSafe(
         "module",
         "__filename",
         "__dirname",
+        "global",
+        "globalThis",
       ],
     );
   }
@@ -1122,6 +1124,8 @@ Module.prototype._compile = function (content, filename, format) {
     this,
     filename,
     dirname,
+    globalThis,
+    globalThis,
   );
   if (requireDepth === 0) {
     statCache = null;

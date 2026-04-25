@@ -12,6 +12,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::env;
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -26,7 +27,7 @@ use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
-use base_rt::RuntimeOtelExtraAttributes;
+use deno_otel_attrs::RuntimeOtelExtraAttributes;
 use deno_core::GarbageCollected;
 use deno_core::OpState;
 use deno_core::futures::FutureExt;
@@ -1659,7 +1660,7 @@ impl OtelTracer {
         false,
         TraceState::NONE,
       );
-      return Ok(OtelSpan(RefCell::new(Box::new(OtelSpanState::Done(noop_context)))));
+      return Ok(OtelSpan(Rc::new(RefCell::new(Box::new(OtelSpanState::Done(noop_context))))));
     };
 
     match parent {
@@ -1756,7 +1757,7 @@ impl OtelTracer {
         false,
         TraceState::NONE,
       );
-      return Ok(OtelSpan(RefCell::new(Box::new(OtelSpanState::Done(noop_context)))));
+      return Ok(OtelSpan(Rc::new(RefCell::new(Box::new(OtelSpanState::Done(noop_context))))));
     };
     let span_context = SpanContext::new(
       parent_trace_id,

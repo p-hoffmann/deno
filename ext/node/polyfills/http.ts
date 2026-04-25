@@ -69,7 +69,9 @@ import {
   ERR_UNESCAPED_CHARACTERS,
 } from "ext:deno_node/internal/errors.ts";
 import { getTimerDuration } from "ext:deno_node/internal/timers.mjs";
+import { getIPFamily } from "ext:deno_node/internal/net.ts";
 import { upgradeHttpRaw } from "ext:deno_http/00_serve.ts";
+import { op_http_serve_address_override } from "ext:core/ops";
 import { serve } from "ext:runtime/http.js";
 import { headersEntries } from "ext:deno_fetch/20_headers.js";
 import { Response } from "ext:deno_fetch/23_response.js";
@@ -2325,8 +2327,17 @@ export class ServerImpl extends EventEmitter {
     return this;
   }
 
-  _listen(hostname: string, port: number): Deno.Listener {
-    return listenDeno({ hostname, port });
+  _listen(
+    hostname: string,
+    port: number,
+  ): { addr: Deno.NetAddr; close(): void } {
+    // trex's serve() does its own Deno.listen() internally (ext/runtime/js/http.js),
+    // so don't bind here - return a fake listener whose .addr is read synchronously
+    // by the caller to populate this.#addr.
+    return {
+      addr: { hostname, port, transport: "tcp" } as Deno.NetAddr,
+      close() {},
+    };
   }
 
   _serve() {
@@ -2349,21 +2360,10 @@ export class ServerImpl extends EventEmitter {
         req.url = request.url.replace(/^https?:\/\//, "");
         req[kRawHeaders] = request.headers;
 
-        if (this.listenerCount("connect") > 0) {
-          return (async () => {
-            const { conn, response, head } = await upgradeHttpRawConnect(
-              request,
-            );
-            const socket = new Socket({
-              handle: new TCP(constants.SERVER, conn),
-            });
-            req.socket = socket;
-            this.emit("connect", req, socket, Buffer.from(head));
-            return response;
-          })();
-        } else {
-          return new Response(null, { status: 405 });
-        }
+        // TODO(trex): CONNECT upgrades need the fence-based raw-upgrade path
+        // used by ext/runtime/js/http.js (op_http_upgrade_raw2_fence). Not
+        // wired through trex's serve() yet - reject until a test needs it.
+        return new Response(null, { status: 501 });
       }
 
       // Slice off the origin so that we only have pathname + search
@@ -2423,18 +2423,19 @@ export class ServerImpl extends EventEmitter {
     if (!listener) {
       return;
     }
+    const addr = listener.addr as Deno.NetAddr;
     try {
-      this.#server = serveHttpOnListener(
-        listener,
-        ac.signal,
+      // Route through trex's worker-safe serve() - it performs its own
+      // Deno.listen() internally and handles request dispatch through the
+      // worker's HTTP pipeline.
+      this.#server = serve({
         handler,
-        (_error) => {
-          return new Response("Internal Server Error", { status: 500 });
-        },
-        () => {
-          this.emit("listening");
-        },
-      );
+        hostname: addr.hostname,
+        port: addr.port,
+        onError: (_error) =>
+          new Response("Internal Server Error", { status: 500 }),
+        onListen: () => this.emit("listening"),
+      });
     } catch (e) {
       this.emit("error", e);
       return;

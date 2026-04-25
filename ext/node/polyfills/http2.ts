@@ -124,6 +124,7 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_CHAR,
   ERR_OUT_OF_RANGE,
+  ERR_SOCKET_CLOSED,
   hideStackFrames,
 } from "ext:deno_node/internal/errors.ts";
 import {

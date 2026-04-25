@@ -1,5 +1,5 @@
 [package]
-name = "base_rt"
+name = "deno_otel_attrs"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"

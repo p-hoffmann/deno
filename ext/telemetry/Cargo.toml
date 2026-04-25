@@ -15,7 +15,7 @@ path = "lib.rs"
 
 [dependencies]
 async-trait.workspace = true
-base_rt = { path = "../base_rt" }
+deno_otel_attrs = { path = "../base_rt" }
 deno_core.workspace = true
 deno_error.workspace = true
 deno_net.workspace = true

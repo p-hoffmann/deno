@@ -18,6 +18,7 @@ use deno_core::url::Url;
 use deno_core::v8;
 use deno_core::v8::ExternalReference;
 use deno_error::JsErrorBox;
+use deno_permissions::CheckedPath;
 use deno_permissions::OpenAccessKind;
 use deno_permissions::PermissionsContainer;
 use node_resolver::DenoIsBuiltInNodeModuleChecker;
@@ -916,7 +917,10 @@ impl sys_traits::BaseFsRead for DenoFsNodeResolverEnv {
   fn base_fs_read(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
     self
       .fs
-      .read_file_sync(&CheckedPath::unsafe_new(Cow::Borrowed(path)))
+      .read_file_sync(
+        &CheckedPath::unsafe_new(Cow::Borrowed(path)),
+        deno_fs::OpenOptions::read(),
+      )
       .map(|bytes| Cow::Owned(bytes.into_owned()))
       .map_err(|err| err.into_io_error())
   }
