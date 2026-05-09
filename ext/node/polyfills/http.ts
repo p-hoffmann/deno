@@ -3,7 +3,7 @@
 // TODO(petamoriken): enable prefer-primordials for node polyfills
 // deno-lint-ignore-file prefer-primordials
 
-import { core, primordials } from "ext:core/mod.js";
+import { core, internals, primordials } from "ext:core/mod.js";
 import {
   op_node_http_await_information,
   op_node_http_await_response,
@@ -70,7 +70,7 @@ import {
 } from "ext:deno_node/internal/errors.ts";
 import { getTimerDuration } from "ext:deno_node/internal/timers.mjs";
 import { getIPFamily } from "ext:deno_node/internal/net.ts";
-import { upgradeHttpRaw } from "ext:deno_http/00_serve.ts";
+import { upgradeHttpRaw as defaultUpgradeHttpRaw } from "ext:deno_http/00_serve.ts";
 import { op_http_serve_address_override } from "ext:core/ops";
 import { serve } from "ext:runtime/http.js";
 import { headersEntries } from "ext:deno_fetch/20_headers.js";
@@ -2381,7 +2381,15 @@ export class ServerImpl extends EventEmitter {
         req.upgrade && req.upgrade.toLowerCase() !== "h2c" &&
         this.listenerCount("upgrade") > 0
       ) {
-        const { conn, response } = upgradeHttpRaw(request);
+        // Use internals.upgradeHttpRaw so embedders (e.g. the trexas
+        // edge-runtime fork) can override the upgrade implementation.
+        // Default deno_http upgradeHttpRaw only works for requests served
+        // by Deno.serve; embedders that drive HTTP via the legacy HttpConn
+        // API need to substitute their own upgrade flow.
+        const upgradeFn = (typeof internals.upgradeHttpRaw === "function")
+          ? internals.upgradeHttpRaw
+          : defaultUpgradeHttpRaw;
+        const { conn, response } = upgradeFn(request);
         const socket = new Socket({
           handle: new TCP(constants.SERVER, conn),
         });
