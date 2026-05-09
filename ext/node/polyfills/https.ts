@@ -17,7 +17,6 @@ import { type ServerHandler, ServerImpl as HttpServer } from "node:http";
 import { validateObject } from "ext:deno_node/internal/validators.mjs";
 import { kEmptyObject } from "ext:deno_node/internal/util.mjs";
 import { Buffer } from "node:buffer";
-import { listenTls } from "ext:deno_net/02_tls.js";
 
 export class Server extends HttpServer {
   constructor(opts, requestListener?: ServerHandler) {
@@ -41,20 +40,15 @@ export class Server extends HttpServer {
     super(opts, requestListener);
   }
 
-  _listen(hostname: string, port: number): Deno.Listener {
-    const cert = this._opts.cert instanceof Buffer
-      ? this._opts.cert.toString()
-      : this._opts.cert;
-    const key = this._opts.key instanceof Buffer
-      ? this._opts.key.toString()
-      : this._opts.key;
-    return listenTls({
-      hostname,
-      port,
-      cert,
-      key,
-      alpnProtocols: ["h2", "http/1.1"],
-    });
+  _listen(hostname: string, port: number): { addr: Deno.NetAddr; close(): void } {
+    // Match http.Server._listen: trex's serve() binds inside the worker
+    // pipeline, so don't open a real socket here. TLS termination happens
+    // upstream (caddy/trex), so cert/key on `this._opts` are unused inside
+    // the worker.
+    return {
+      addr: { hostname, port, transport: "tcp" } as Deno.NetAddr,
+      close() {},
+    };
   }
 
   _encrypted = true;
