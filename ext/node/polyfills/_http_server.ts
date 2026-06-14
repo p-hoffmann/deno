@@ -20,7 +20,6 @@ import {
 
 import { TextEncoder } from "ext:deno_web/08_text_encoding.js";
 import { setTimeout } from "ext:deno_web/02_timers.js";
-import { updateSpanFromError } from "ext:deno_telemetry/util.ts";
 import {
   _normalizeArgs,
   createConnection,
@@ -54,14 +53,9 @@ import {
   validateHeaderValue,
 } from "node:_http_outgoing";
 import { ok as assert } from "node:assert";
-import { kOutHeaders } from "ext:deno_node/internal/http.ts";
-import { _checkIsHttpToken as checkIsHttpToken } from "node:_http_common";
-import { Agent, globalAgent } from "node:_http_agent";
-import { urlToHttpOptions } from "ext:deno_node/internal/url.ts";
+import { Agent } from "node:_http_agent";
 import { kEmptyObject, once } from "ext:deno_node/internal/util.mjs";
 import { constants, TCP } from "ext:deno_node/internal_binding/tcp_wrap.ts";
-import { kStreamBaseField } from "ext:deno_node/internal_binding/stream_wrap.ts";
-import { notImplemented } from "ext:deno_node/_utils.ts";
 import {
   connResetException,
   ERR_HTTP_HEADERS_SENT,
@@ -71,7 +65,6 @@ import {
   ERR_INVALID_PROTOCOL,
   ERR_UNESCAPED_CHARACTERS,
 } from "ext:deno_node/internal/errors.ts";
-import { getTimerDuration } from "ext:deno_node/internal/timers.mjs";
 import { getIPFamily } from "ext:deno_node/internal/net.ts";
 import { upgradeHttpRaw as defaultUpgradeHttpRaw } from "ext:deno_http/00_serve.ts";
 import { op_http_serve_address_override } from "ext:core/ops";
@@ -86,10 +79,6 @@ import {
   restoreSnapshot,
   TRACING_ENABLED,
 } from "ext:deno_telemetry/telemetry.ts";
-import { timerId } from "ext:deno_web/03_abort_signal.js";
-import { clearTimeout as webClearTimeout } from "ext:deno_web/02_timers.js";
-import { resourceForReadableStream } from "ext:deno_web/06_streams.js";
-import { kReinitializeHandle } from "ext:deno_node/internal/net.ts";
 import {
   kDestroyed,
   kEnded,
@@ -97,9 +86,6 @@ import {
   kErrored,
   kState,
 } from "ext:deno_node/internal/streams/utils.js";
-import { TcpConn, UpgradedConn } from "ext:deno_net/01_net.js";
-import { TlsConn } from "ext:deno_net/02_tls.js";
-import { methods as METHODS } from "node:_http_common";
 import { deprecate } from "node:util";
 
 // Flag to track if DENO_SERVE_ADDRESS override has been consumed for Node http servers.
@@ -1225,6 +1211,32 @@ export function _connectionListener() {
   );
 }
 
+// trex: node:http2 / node:https (upstream 2.7.14) import these server-internal
+// helpers from node:_http_server. trex's server is serve()-based (not the
+// net.Server connection model), so connection tracking is a no-op; storeHTTPOptions
+// still records the request/response classes so subclasses can override them.
+import { kIncomingMessage } from "node:_http_common";
+const kServerResponse = Symbol("ServerResponse");
+
+function setupConnectionsTracking() {}
+
+function httpServerPreClose(server) {
+  server?.closeIdleConnections?.();
+}
+
+function storeHTTPOptions(options) {
+  this[kIncomingMessage] = options.IncomingMessage || IncomingMessageForServer;
+  this[kServerResponse] = options.ServerResponse || ServerResponse;
+}
+
+export {
+  httpServerPreClose,
+  kIncomingMessage,
+  kServerResponse,
+  setupConnectionsTracking,
+  storeHTTPOptions,
+};
+
 export default {
   STATUS_CODES,
   Server,
@@ -1232,4 +1244,9 @@ export default {
   IncomingMessageForServer,
   createServer,
   _connectionListener,
+  httpServerPreClose,
+  kIncomingMessage,
+  kServerResponse,
+  setupConnectionsTracking,
+  storeHTTPOptions,
 };
