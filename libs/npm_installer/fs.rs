@@ -146,13 +146,12 @@ mod test {
   use sys_traits::FsRead;
   use sys_traits::FsSymlinkDir;
   use sys_traits::FsWrite;
-  use test_util::TempDir;
 
   use super::*;
 
   #[test]
   fn copy_dir_recursive_replaces_hardlinked_files() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let sys = sys_traits::impls::RealSys;
     let root = temp_dir.path().to_path_buf();
     let from = root.join("from");

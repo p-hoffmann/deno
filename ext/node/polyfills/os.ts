@@ -33,12 +33,21 @@ const { isWindows } = core.loadExtScript("ext:deno_node/_util/os.ts");
 const { os } = core.loadExtScript(
   "ext:deno_node/internal_binding/constants.ts",
 );
-// trex: sandboxed os facts (uid/gid/hostname/network/etc.) come from
-// ext_os, not the host — see ext/ext_os/os.js.
-const { osCalls } = core.loadExtScript("ext:os/os.js");
 const { validateIntegerRange } = core.loadExtScript(
   "ext:deno_node/_utils.ts",
 );
+// trex: `ext:os/os.js` (ext_os) is registered as a real `esm` module, not
+// `lazy_loaded_js`, so it can't be reached from here via `loadExtScript` —
+// this file is loaded as a classic script (see `ext/node/lib.rs`'s
+// `lazy_loaded_js` list) and classic scripts can't use a static `import`
+// either. `os_esm.ts` (a real ESM module) statically imports `osCalls`
+// from `ext:os/os.js` and overrides `uptime`/`userInfo` with the
+// canonical ext_os-backed values for the primary `node:os` entry point.
+// The synthetic values below (matching ext_os/os.js's own constants) keep
+// this file's own `uptime`/`userInfo` — reachable via
+// `require("os")` in `01_require.js`, which loads this file directly
+// without going through `os_esm.ts` — from leaking real host identity.
+const osStartTime = Date.now();
 
 const {
   ArrayBuffer,
@@ -241,16 +250,19 @@ function type() {
 }
 
 function uptime() {
-  return osCalls.osUptime();
+  // trex: sandboxed — synthetic uptime, not the host's (see os_esm.ts for
+  // the canonical ext_os-backed value used by the `node:os` entry point).
+  return Math.floor(Math.abs(Date.now() - osStartTime) / 1000);
 }
 
 function userInfo(
   options = { __proto__: null, encoding: "utf-8" },
 ) {
-  // trex: sandboxed — synthetic identity from ext_os, no host passwd lookup.
+  // trex: sandboxed — synthetic identity (matches ext_os/os.js's osCalls
+  // constants), no host passwd lookup.
   return {
-    uid: osCalls.uid(),
-    gid: osCalls.gid(),
+    uid: 1000,
+    gid: 1000,
     homedir: homedir(),
     shell: null,
     username: "",

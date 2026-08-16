@@ -1,25 +1,20 @@
 // Copyright 2018-2026 the Deno authors. MIT license.
 
-import { core, primordials } from "ext:core/mod.js";
-import { windowOrWorkerGlobalScope } from "ext:runtime/98_global_scope_shared.js";
+import { core } from "ext:core/mod.js";
 const { Console } = core.loadExtScript("ext:deno_node/console.ts");
+// trex: `ext:deno_web/01_console.js` is registered as `lazy_loaded_js`
+// (not an `esm` entry point), so it has to be pulled in via
+// `loadExtScript` like the import above rather than a static `import`.
+const { Console: ConsoleImpl } = core.loadExtScript(
+  "ext:deno_web/01_console.js",
+);
 
-// Don't rely on global `console` because during bootstrapping, it is pointing
-// to the native `console` object provided by V8. Read via the property
-// descriptor from `windowOrWorkerGlobalScope` so this works whether the
-// install used a data descriptor (`propNonEnumerable`) or an accessor
-// descriptor (`propNonEnumerableLazyLoaded`).
-// deno-lint-ignore no-explicit-any
-const _consoleDesc = windowOrWorkerGlobalScope.console as any;
-const console = typeof _consoleDesc.get === "function"
-  ? _consoleDesc.get()
-  : _consoleDesc.value;
+// trex: build a fresh Console instance on every module load instead of
+// reusing the bootstrap-time global console singleton, so each worker
+// gets its own console state rather than sharing one across workers.
+const console = new ConsoleImpl((msg, level) => core.print(msg, level > 1));
 
-const { ObjectAssign } = primordials;
-
-ObjectAssign(console, { Console });
-
-export default console;
+export default Object.assign(console, { Console });
 
 export { Console };
 export const {
