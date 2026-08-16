@@ -6,7 +6,6 @@
 
 (function () {
 const { core, primordials } = __bootstrap;
-const { op_set_raw } = core.ops;
 const {
   Uint8Array,
   ArrayPrototypePush,
@@ -156,10 +155,6 @@ class Stdin {
     return this.#readable;
   }
 
-  setRaw(mode, options = { __proto__: null }) {
-    const cbreak = !!(options.cbreak ?? false);
-    op_set_raw(this.#rid, mode, cbreak);
-  }
 
   isTerminal() {
     return core.isTerminal(this.#rid);

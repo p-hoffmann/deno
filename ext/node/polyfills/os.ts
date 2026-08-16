@@ -25,24 +25,19 @@
 (function () {
 const { core, primordials } = __bootstrap;
 const {
-  op_cpus,
-  op_homedir,
   op_node_os_get_priority,
   op_node_os_set_priority,
-  op_node_os_user_info,
 } = core.ops;
 
 const { isWindows } = core.loadExtScript("ext:deno_node/_util/os.ts");
 const { os } = core.loadExtScript(
   "ext:deno_node/internal_binding/constants.ts",
 );
-const { Buffer } = core.loadExtScript("ext:deno_node/internal/buffer.mjs");
-const { osUptime } = core.loadExtScript("ext:deno_os/30_os.js");
-const { validateInt32 } = core.loadExtScript(
-  "ext:deno_node/internal/validators.mjs",
-);
-const { denoErrorToNodeSystemError } = core.loadExtScript(
-  "ext:deno_node/internal/errors.ts",
+// trex: sandboxed os facts (uid/gid/hostname/network/etc.) come from
+// ext_os, not the host — see ext/ext_os/os.js.
+const { osCalls } = core.loadExtScript("ext:os/os.js");
+const { validateIntegerRange } = core.loadExtScript(
+  "ext:deno_node/_utils.ts",
 );
 
 const {
@@ -52,7 +47,6 @@ const {
   DataViewPrototypeSetInt16,
   Error,
   Int16Array,
-  ObjectDefineProperties,
   SafeArrayIterator,
   StringPrototypeEndsWith,
   StringPrototypeSlice,
@@ -82,7 +76,18 @@ machine[SymbolToPrimitive] = () => machine();
 tmpdir[SymbolToPrimitive] = () => tmpdir();
 
 function cpus() {
-  return op_cpus();
+  // trex: sandboxed — report a single synthetic core instead of the host's.
+  return [{
+    model: "",
+    speed: 0,
+    times: {
+      user: 0,
+      nice: 0,
+      sys: 0,
+      idle: 0,
+      irq: 0,
+    },
+  }];
 }
 
 function endianness() {
@@ -105,16 +110,13 @@ function freemem() {
 }
 
 function getPriority(pid = 0) {
-  validateInt32(pid, "pid");
-  try {
-    return op_node_os_get_priority(pid);
-  } catch (error) {
-    throw denoErrorToNodeSystemError(error, "uv_os_getpriority");
-  }
+  validateIntegerRange(pid, "pid");
+  return op_node_os_get_priority(pid);
 }
 
 function homedir() {
-  return op_homedir();
+  // trex: sandboxed — fixed path instead of the host's home directory.
+  return "/home/deno";
 }
 
 function hostname() {
@@ -188,14 +190,10 @@ function setPriority(pid, priority) {
     pid = 0;
   }
 
-  validateInt32(pid, "pid");
-  validateInt32(priority, "priority", -20, 19);
+  validateIntegerRange(pid, "pid");
+  validateIntegerRange(priority, "priority", -20, 19);
 
-  try {
-    op_node_os_set_priority(pid, priority);
-  } catch (error) {
-    throw denoErrorToNodeSystemError(error, "uv_os_setpriority");
-  }
+  op_node_os_set_priority(pid, priority);
 }
 
 function tmpdir() {
@@ -243,33 +241,19 @@ function type() {
 }
 
 function uptime() {
-  return osUptime();
+  return osCalls.osUptime();
 }
 
 function userInfo(
   options = { __proto__: null, encoding: "utf-8" },
 ) {
-  let uid = Deno.uid();
-  let gid = Deno.gid();
-
-  if (isWindows) {
-    uid = -1;
-    gid = -1;
-  }
-  let { username, homedir: hd, shell } = op_node_os_user_info(uid);
-
-  if (options?.encoding === "buffer") {
-    hd = hd ? Buffer.from(hd) : hd;
-    shell = shell ? Buffer.from(shell) : shell;
-    username = Buffer.from(username);
-  }
-
+  // trex: sandboxed — synthetic identity from ext_os, no host passwd lookup.
   return {
-    uid,
-    gid,
-    homedir: hd,
-    shell,
-    username,
+    uid: osCalls.uid(),
+    gid: osCalls.gid(),
+    homedir: homedir(),
+    shell: null,
+    username: "",
   };
 }
 
@@ -301,30 +285,10 @@ const mod = {
   uptime,
   userInfo,
   version,
+  constants,
+  EOL,
+  devNull,
 };
-
-ObjectDefineProperties(mod, {
-  constants: {
-    __proto__: null,
-    configurable: false,
-    enumerable: true,
-    value: constants,
-  },
-  EOL: {
-    __proto__: null,
-    configurable: true,
-    enumerable: true,
-    writable: false,
-    value: EOL,
-  },
-  devNull: {
-    __proto__: null,
-    configurable: true,
-    enumerable: true,
-    writable: false,
-    value: devNull,
-  },
-});
 
 return {
   "module.exports": mod,

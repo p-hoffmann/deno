@@ -2260,7 +2260,6 @@ mod test {
   use sys_traits::FsRead;
   use sys_traits::FsSymlinkDir;
   use sys_traits::FsWrite;
-  use test_util::TempDir;
 
   use super::*;
 
@@ -2285,7 +2284,7 @@ mod test {
 
   #[test]
   fn test_setup_cache() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let cache_bin_path = temp_dir.path().join("cache.bin").to_path_buf();
     let sys = sys_traits::impls::RealSys;
     let mut cache = LocalSetupCache::load(sys.clone(), cache_bin_path.clone());
@@ -2366,7 +2365,7 @@ mod test {
 
   #[test]
   fn test_symlink_package_dir_replaces_existing_link() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let sys = sys_traits::impls::RealSys;
     let root = temp_dir.path().to_path_buf();
 
@@ -2394,7 +2393,7 @@ mod test {
 
   #[test]
   fn test_create_retry_if_exists_clears_stale_entry() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let sys = sys_traits::impls::RealSys;
     let path = temp_dir.path().join("entry").to_path_buf();
 
@@ -2423,7 +2422,7 @@ mod test {
 
   #[test]
   fn test_create_retry_if_exists_passes_through_success() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let sys = sys_traits::impls::RealSys;
     let path = temp_dir.path().join("entry").to_path_buf();
 
@@ -2474,7 +2473,7 @@ mod test {
 
   #[test]
   fn test_ensure_jsr_npmrc() {
-    let temp_dir = TempDir::new();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let sys = sys_traits::impls::RealSys;
     let dir = temp_dir.path().to_path_buf();
     let npmrc_path = dir.join(".npmrc");
