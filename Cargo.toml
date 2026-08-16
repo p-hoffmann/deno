@@ -13,6 +13,7 @@ members = [
   "ext/canvas",
   "ext/cron",
   "ext/crypto",
+  "ext/ext_os",
   "ext/fetch",
   "ext/ffi",
   "ext/fs",
@@ -143,6 +144,8 @@ deno_webidl = { version = "0.257.0", path = "./ext/webidl" }
 deno_websocket = { version = "0.262.0", path = "./ext/websocket" }
 deno_webstorage = { version = "0.252.0", path = "./ext/webstorage" }
 denort_helper = { version = "0.55.0", path = "./ext/rt_helper" }
+# trex: ext_os sandboxing crate (add-only, no upstream equivalent).
+ext_os = { version = "0.1.0", path = "./ext/ext_os" }
 
 # workspace libraries
 deno_bench_util = { version = "0.251.0", path = "./tests/bench_util" }
