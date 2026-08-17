@@ -1223,6 +1223,12 @@ export function _connectionListener() {
 // still records the request/response classes so subclasses can override them.
 import { kIncomingMessage } from "node:_http_common";
 const kServerResponse = Symbol("ServerResponse");
+// trex: upstream 2.9.5's _http_server.js exports this symbol. Nothing in-tree
+// reads it (trex's serve()-based server has no connection-checking interval),
+// but it is part of the module's public surface, so keep parity.
+const kConnectionsCheckingInterval = Symbol(
+  "http.server.connectionsCheckingInterval",
+);
 
 function setupConnectionsTracking() {}
 
@@ -1235,8 +1241,22 @@ function storeHTTPOptions(options) {
   this[kServerResponse] = options.ServerResponse || ServerResponse;
 }
 
+// trex: upstream 2.9.5 grew a DENO_SERVE_ADDRESS override / ALPN-routing
+// surface on node:_http_server. The implementations live in
+// internal/http/address_override.js and upstream's _http_server.js only
+// re-exports them; node:http2 (http2.ts:72-78) and node:https (https.ts:65-67)
+// destructure them from node:_http_server, so the fork's replacement has to
+// re-export them too or those consumers get `undefined` and then call it.
+export {
+  applyAddressOverride,
+  notifyAddressOverrideServing,
+  SERVER_KIND_NODE_HTTP2,
+  startOverrideListener,
+} from "ext:deno_node/internal/http/address_override.js";
+
 export {
   httpServerPreClose,
+  kConnectionsCheckingInterval,
   kIncomingMessage,
   kServerResponse,
   setupConnectionsTracking,
