@@ -76,13 +76,9 @@ pub enum WorkspaceResolverCreateError {
     #[inherit]
     source: Box<ConfigFileError>,
   },
-  #[class(inherit)]
+  #[class(generic)]
   #[error(transparent)]
-  ImportMap(
-    #[from]
-    #[inherit]
-    ImportMapError,
-  ),
+  ImportMap(#[from] ImportMapError),
   #[class(type)]
   #[error("Package '{name}' not found in catalog")]
   CatalogPackageNotFound { name: String },
@@ -232,10 +228,10 @@ pub struct NotFoundInCompilerOptionsPathsError {
 
 #[derive(Debug, Error, JsError)]
 pub enum MappedResolutionError {
-  #[class(inherit)]
+  #[class(generic)]
   #[error(transparent)]
   Specifier(#[from] SpecifierError),
-  #[class(inherit)]
+  #[class(generic)]
   #[error(transparent)]
   ImportMap(#[from] ImportMapError),
   #[class(inherit)]
@@ -255,9 +251,10 @@ impl MappedResolutionError {
         SpecifierError::InvalidUrl(_) => false,
         SpecifierError::ImportPrefixMissing { .. } => true,
       },
-      MappedResolutionError::ImportMap(err) => {
-        matches!(**err, ImportMapErrorKind::UnmappedBareSpecifier(_, _))
-      }
+      MappedResolutionError::ImportMap(err) => matches!(
+        err.as_kind(),
+        ImportMapErrorKind::UnmappedBareSpecifier(_, _)
+      ),
       MappedResolutionError::Workspace(_) => false,
       MappedResolutionError::NotFoundInCompilerOptionsPaths(_) => false,
     }
@@ -310,13 +307,13 @@ enum CachedMetadataFsEntry {
 }
 
 #[derive(Debug)]
-struct CachedMetadataFs<TSys: FsMetadata> {
+pub struct CachedMetadataFs<TSys: FsMetadata> {
   sys: TSys,
   cache: Option<MaybeDashMap<PathBuf, Option<CachedMetadataFsEntry>>>,
 }
 
 impl<TSys: FsMetadata> CachedMetadataFs<TSys> {
-  fn new(sys: TSys, options: FsCacheOptions) -> Self {
+  pub fn new(sys: TSys, options: FsCacheOptions) -> Self {
     Self {
       sys,
       cache: match options {
@@ -400,14 +397,14 @@ impl SloppyImportsResolutionReason {
 }
 
 #[derive(Debug)]
-struct SloppyImportsResolver<TSys: FsMetadata> {
+pub struct SloppyImportsResolver<TSys: FsMetadata> {
   compiler_options_resolver: CompilerOptionsResolverCellRc,
   fs: CachedMetadataFs<TSys>,
   enabled_by_options: bool,
 }
 
 impl<TSys: FsMetadata> SloppyImportsResolver<TSys> {
-  fn new(
+  pub fn new(
     fs: CachedMetadataFs<TSys>,
     compiler_options_resolver: CompilerOptionsResolverCellRc,
     options: SloppyImportsOptions,
@@ -422,7 +419,7 @@ impl<TSys: FsMetadata> SloppyImportsResolver<TSys> {
     }
   }
 
-  fn resolve(
+  pub fn resolve(
     &self,
     specifier: &Url,
     referrer: &Url,
@@ -1145,11 +1142,16 @@ impl<TSys: FsMetadata + FsRead> WorkspaceResolver<TSys> {
     ));
 
     Ok(Self {
-      workspace_root: workspace.root_dir_url().clone(),
+      workspace_root: new_rc(workspace.root_dir_url().as_ref().clone()),
       pkg_json_dep_resolution: options.pkg_json_dep_resolution,
       jsr_pkgs,
       maybe_import_map,
-      pkg_jsons: FolderScopedMap::from_map(pkg_jsons),
+      pkg_jsons: FolderScopedMap::from_map(
+        pkg_jsons
+          .into_iter()
+          .map(|(k, v)| (new_rc(k.as_ref().clone()), v))
+          .collect(),
+      ),
       sloppy_imports_options: options.sloppy_imports_options,
       fs_cache_options: options.fs_cache_options,
       compiler_options_resolver,
