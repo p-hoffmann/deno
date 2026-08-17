@@ -18,8 +18,10 @@ import {
   op_tls_start,
 } from "ext:core/ops";
 
-import { TextEncoder } from "ext:deno_web/08_text_encoding.js";
-import { setTimeout } from "ext:deno_web/02_timers.js";
+const { TextEncoder } = core.loadExtScript(
+  "ext:deno_web/08_text_encoding.js",
+);
+const { setTimeout } = core.loadExtScript("ext:deno_web/02_timers.js");
 import {
   _normalizeArgs,
   createConnection,
@@ -72,19 +74,27 @@ const {
   ERR_UNESCAPED_CHARACTERS,
 } = core.loadExtScript("ext:deno_node/internal/errors.ts");
 const { getIPFamily } = core.loadExtScript("ext:deno_node/internal/net.ts");
-import { upgradeHttpRaw as defaultUpgradeHttpRaw } from "ext:deno_http/00_serve.ts";
+const { upgradeHttpRaw: defaultUpgradeHttpRaw } = core.loadExtScript(
+  "ext:deno_http/00_serve.ts",
+);
 import { op_http_serve_address_override } from "ext:core/ops";
 import { serve } from "ext:runtime/http.js";
-import { headersEntries } from "ext:deno_fetch/20_headers.js";
-import { Response } from "ext:deno_fetch/23_response.js";
-import {
+const { headersEntries } = core.loadExtScript(
+  "ext:deno_fetch/20_headers.js",
+);
+const { Response } = core.loadExtScript("ext:deno_fetch/23_response.js");
+const {
   builtinTracer,
   ContextManager,
   enterSpan,
-  PROPAGATORS,
   restoreSnapshot,
-  TRACING_ENABLED,
-} from "ext:deno_telemetry/telemetry.ts";
+  // trex: 2.9.5 keeps the mutable TRACING_ENABLED / PROPAGATORS on `otelState`
+  // precisely because loadExtScript cannot reproduce ESM live bindings --
+  // destructuring them here would freeze `false` / `[]` at load time. Neither
+  // is referenced in this file (see the unused-imports note in the header); if
+  // that changes, read them off `otelState` at the use site.
+  otelState,
+} = core.loadExtScript("ext:deno_telemetry/telemetry.ts");
 const {
   kDestroyed,
   kEnded,
