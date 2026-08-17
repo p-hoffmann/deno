@@ -12,6 +12,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::env;
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -40,6 +41,7 @@ use deno_core::v8;
 use deno_core::v8::DataError;
 use deno_error::JsError;
 use deno_error::JsErrorBox;
+use deno_otel_attrs::RuntimeOtelExtraAttributes;
 use once_cell::sync::Lazy;
 use once_cell::sync::OnceCell;
 use opentelemetry::Array;
@@ -1777,6 +1779,7 @@ fn severity_from_level(level: i32) -> Severity {
 #[op2(fast)]
 fn op_otel_log<'s>(
   scope: &mut v8::PinScope<'s, '_>,
+  state: &mut OpState,
   message: v8::Local<'s, v8::Value>,
   #[smi] level: i32,
   span: v8::Local<'s, v8::Value>,
@@ -1815,6 +1818,13 @@ fn op_otel_log<'s>(
   };
   log_record.add_attribute("log.iostream", iostream);
 
+  if let Some(runtime_attributes) =
+    state.try_borrow::<RuntimeOtelExtraAttributes>()
+  {
+    for (k, v) in runtime_attributes.0.clone() {
+      log_record.add_attribute(k, v.to_string());
+    }
+  }
   if let Some(span) =
     deno_core::_ops::try_unwrap_cppgc_object::<OtelSpan>(scope, span)
   {
@@ -1876,6 +1886,7 @@ fn otel_log_add_exception_attributes(
 #[op2(fast)]
 fn op_otel_log_foreign(
   scope: &mut v8::PinScope<'_, '_>,
+  _state: &mut OpState,
   #[string] message: String,
   #[smi] level: i32,
   trace_id: v8::Local<'_, v8::Value>,
@@ -2000,14 +2011,16 @@ impl OtelTracer {
 
   #[static_method]
   #[cppgc]
-  fn builtin() -> Result<OtelTracer, JsErrorBox> {
-    let OtelGlobals {
+  fn builtin() -> OtelTracer {
+    if let Some(OtelGlobals {
       builtin_instrumentation_scope,
       ..
-    } = OTEL_GLOBALS
-      .get()
-      .ok_or_else(|| JsErrorBox::generic("otel not initialized"))?;
-    Ok(OtelTracer(builtin_instrumentation_scope.clone()))
+    }) = OTEL_GLOBALS.get()
+    {
+      OtelTracer(builtin_instrumentation_scope.clone())
+    } else {
+      OtelTracer(opentelemetry::InstrumentationScope::builder("noop").build())
+    }
   }
 
   #[cppgc]
@@ -2020,13 +2033,23 @@ impl OtelTracer {
     start_time: Option<f64>,
     #[smi] attribute_count: usize,
   ) -> Result<OtelSpan, JsErrorBox> {
-    let OtelGlobals {
+    let Some(OtelGlobals {
       id_generator,
       sampler,
       ..
-    } = OTEL_GLOBALS
-      .get()
-      .ok_or_else(|| JsErrorBox::generic("otel not initialized"))?;
+    }) = OTEL_GLOBALS.get()
+    else {
+      let noop_context = SpanContext::new(
+        TraceId::INVALID,
+        SpanId::INVALID,
+        TraceFlags::default(),
+        false,
+        TraceState::NONE,
+      );
+      return Ok(OtelSpan(Rc::new(RefCell::new(Box::new(
+        OtelSpanState::Done(noop_context),
+      )))));
+    };
     let parent_span_id;
     let trace_id;
     let trace_state;
@@ -2130,13 +2153,23 @@ impl OtelTracer {
     if parent_span_id == SpanId::INVALID {
       return Err(JsErrorBox::generic("invalid span id"));
     };
-    let OtelGlobals {
+    let Some(OtelGlobals {
       id_generator,
       sampler,
       ..
-    } = OTEL_GLOBALS
-      .get()
-      .ok_or_else(|| JsErrorBox::generic("otel not initialized"))?;
+    }) = OTEL_GLOBALS.get()
+    else {
+      let noop_context = SpanContext::new(
+        TraceId::INVALID,
+        SpanId::INVALID,
+        TraceFlags::default(),
+        false,
+        TraceState::NONE,
+      );
+      return Ok(OtelSpan(Rc::new(RefCell::new(Box::new(
+        OtelSpanState::Done(noop_context),
+      )))));
+    };
     // Reconstruct the remote parent context so `parentbased_*` samplers honor
     // the upstream sampling decision carried in the propagated trace flags.
     let parent_context = SpanContext::new(
@@ -2325,7 +2358,7 @@ impl OtelSpan {
   }
 
   #[fast]
-  fn end(&self, end_time: f64) {
+  fn end(&self, state: &mut OpState, end_time: f64) {
     let end_time = if end_time.is_nan() {
       SystemTime::now()
     } else {
@@ -2333,6 +2366,8 @@ impl OtelSpan {
         .checked_add(Duration::from_secs_f64(end_time / 1000.0))
         .unwrap()
     };
+    let runtime_attributes =
+      state.try_borrow::<RuntimeOtelExtraAttributes>().clone();
 
     let mut state = self.0.borrow_mut();
     if let OtelSpanState::Recording(span) = &mut **state {
@@ -2342,6 +2377,11 @@ impl OtelSpan {
         Box::new(OtelSpanState::Done(span_context)),
       ) {
         span.end_time = end_time;
+        if let Some(attributes) = runtime_attributes {
+          for (k, v) in attributes.0.clone() {
+            span.attributes.push(KeyValue::new(k, v));
+          }
+        }
         let Some(OtelGlobals { span_processor, .. }) = OTEL_GLOBALS.get()
         else {
           return;
@@ -3279,17 +3319,36 @@ struct GcMetricDataInner {
 
 struct GcMetricData(RefCell<GcMetricDataInner>);
 
+static DEBUG_GC: Lazy<bool> = Lazy::new(|| env::var("TREX_DEBUG_GC").is_ok());
+
 impl GcMetricData {
   extern "C" fn prologue_callback(
     isolate: v8::UnsafeRawIsolatePtr,
-    _gc_type: v8::GCType,
-    _flags: v8::GCCallbackFlags,
+    gc_type: v8::GCType,
+    flags: v8::GCCallbackFlags,
     _data: *mut c_void,
   ) {
-    // SAFETY: Isolate is valid during callback
+    if *DEBUG_GC {
+      log::debug!(
+        "telemetry GC prologue: isolate={:?} type={:?} flags={:?}",
+        isolate,
+        gc_type,
+        flags
+      );
+    }
+
+    if isolate.is_null() {
+      if *DEBUG_GC {
+        log::warn!("telemetry GC prologue: null isolate");
+      }
+      return;
+    }
     let isolate =
       unsafe { v8::Isolate::from_raw_isolate_ptr_unchecked(isolate) };
     let Some(this) = isolate.get_slot::<Self>() else {
+      if *DEBUG_GC {
+        log::debug!("telemetry GC prologue: no GcMetricData slot");
+      }
       return;
     };
     this.0.borrow_mut().start = Instant::now();
@@ -3298,18 +3357,39 @@ impl GcMetricData {
   extern "C" fn epilogue_callback(
     isolate: v8::UnsafeRawIsolatePtr,
     gc_type: v8::GCType,
-    _flags: v8::GCCallbackFlags,
+    flags: v8::GCCallbackFlags,
     _data: *mut c_void,
   ) {
-    // SAFETY: Isolate is valid during callback
+    if *DEBUG_GC {
+      log::debug!(
+        "telemetry GC epilogue: isolate={:?} type={:?} flags={:?}",
+        isolate,
+        gc_type,
+        flags
+      );
+    }
+
+    if isolate.is_null() {
+      if *DEBUG_GC {
+        log::warn!("telemetry GC epilogue: null isolate");
+      }
+      return;
+    }
     let isolate =
       unsafe { v8::Isolate::from_raw_isolate_ptr_unchecked(isolate) };
     let Some(this) = isolate.get_slot::<Self>() else {
+      if *DEBUG_GC {
+        log::debug!("telemetry GC epilogue: no GcMetricData slot");
+      }
       return;
     };
     let this = this.0.borrow_mut();
 
     let elapsed = this.start.elapsed();
+
+    if *DEBUG_GC {
+      log::debug!("telemetry GC epilogue: elapsed={:?}", elapsed);
+    }
 
     // https://opentelemetry.io/docs/specs/semconv/runtime/v8js-metrics/#metric-v8jsgcduration
     let gc_type = KeyValue::new(
