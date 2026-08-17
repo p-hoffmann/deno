@@ -8,6 +8,7 @@ members = [
   "cli/rt",
   "cli/rt_desktop",
   "cli/snapshot",
+  "ext/base_rt",
   "ext/bundle",
   "ext/cache",
   "ext/canvas",

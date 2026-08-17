@@ -88,11 +88,16 @@ const {
   ContextManager,
   enterSpan,
   restoreSnapshot,
-  // trex: 2.9.5 keeps the mutable TRACING_ENABLED / PROPAGATORS on `otelState`
-  // precisely because loadExtScript cannot reproduce ESM live bindings --
-  // destructuring them here would freeze `false` / `[]` at load time. Neither
-  // is referenced in this file (see the unused-imports note in the header); if
-  // that changes, read them off `otelState` at the use site.
+  // trex: the fork's ESM import also took TRACING_ENABLED and PROPAGATORS.
+  // They are deliberately NOT destructured here. 2.9.5 rewrote telemetry.ts as
+  // a classic script whose exports object (telemetry.ts:1969-1984) contains
+  // `otelState` and neither mutable name, because loadExtScript cannot
+  // reproduce ESM live bindings -- so destructuring them would bind
+  // `undefined`, not a stale value. Their live values live on `otelState`,
+  // which `wrappedBootstrap` re-syncs after bootstrap(). Neither is referenced
+  // in this file today (see the unused-imports note in the header); if that
+  // changes, read `otelState.TRACING_ENABLED` / `otelState.PROPAGATORS` at the
+  // use site rather than binding them here.
   otelState,
 } = core.loadExtScript("ext:deno_telemetry/telemetry.ts");
 const {
