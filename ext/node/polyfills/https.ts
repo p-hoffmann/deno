@@ -57,6 +57,7 @@ const { kEmptyObject } = core.loadExtScript(
   "ext:deno_node/internal/util.mjs",
 );
 const { Buffer } = core.loadExtScript("ext:deno_node/internal/buffer.mjs");
+const { notImplemented } = core.loadExtScript("ext:deno_node/_utils.ts");
 
 const tls = lazyTls().default;
 const net = lazyNet();
@@ -75,126 +76,68 @@ function getExtraCACertificates() {
   return tls.getCACertificates("default");
 }
 
-// https.Server extends tls.Server (which extends net.Server).
-// Each accepted TCP connection is wrapped with TLS by tls.Server's
-// connectionListener, then the HTTP _connectionListener handles the
-// HTTP protocol on the decrypted stream. Matches Node.js architecture.
-function Server(
-  this: any,
-  opts: any,
-  requestListener?: any,
-) {
-  if (!ObjectPrototypeIsPrototypeOf(Server.prototype, this)) {
-    return new (Server as any)(opts, requestListener);
-  }
+// trex: upstream's https.Server extends tls.Server and terminates TLS on every
+// accepted TCP connection, driving the HTTP protocol over the decrypted stream
+// via _connectionListener. trex terminates TLS upstream (caddy/trex) and its
+// serve() binds inside the worker pipeline, so https.Server here is a thin
+// subclass of the serve()-based http.ServerImpl with `_encrypted` forced on.
+// cert/key in the options are accepted and ignored; the array forms are
+// rejected, as in the fork's 2.7.14 version.
+//
+// Consequences of not being a tls.Server, all intentional:
+//   - upstream's `Server.prototype.listen` DENO_SERVE_ADDRESS override is not
+//     reproduced here; ServerImpl.listen carries trex's own equivalent
+//     (see the address-override block in _http_server.ts).
+//   - closeAllConnections / closeIdleConnections / setTimeout / close are
+//     inherited from ServerImpl rather than copied off HttpServer.prototype.
+//   - there is no "tlsClientError" event, since no TLS handshake happens here.
+class Server extends HttpServer {
+  _encrypted = true;
 
-  let ALPNProtocols: string[] | undefined = ["http/1.1"];
-  if (typeof opts === "function") {
-    requestListener = opts;
-    opts = kEmptyObject;
-  } else if (opts == null) {
-    opts = kEmptyObject;
-  } else {
-    validateObject(opts, "options");
-    // Only set default ALPNProtocols if the caller has not set either
-    if (opts.ALPNProtocols || opts.ALPNCallback) {
-      ALPNProtocols = undefined;
+  constructor(opts: any, requestListener?: any) {
+    if (typeof opts === "function") {
+      requestListener = opts;
+      opts = kEmptyObject;
+    } else if (opts == null) {
+      opts = kEmptyObject;
+    } else {
+      validateObject(opts, "options");
     }
+
+    if (opts.cert && ArrayIsArray(opts.cert)) {
+      notImplemented("https.Server.opts.cert array type");
+    }
+
+    if (opts.key && ArrayIsArray(opts.key)) {
+      notImplemented("https.Server.opts.key array type");
+    }
+
+    super(opts, requestListener);
   }
 
-  FunctionPrototypeCall(storeHTTPOptions, this, opts);
-
-  FunctionPrototypeCall(tls.Server, this, {
-    noDelay: true,
-    ALPNProtocols,
-    ...opts,
-  }, _connectionListener);
-
-  this.httpAllowHalfOpen = false;
-
-  if (requestListener) {
-    this.addListener("request", requestListener);
+  _listen(
+    hostname: string,
+    port: number,
+  ): { addr: Deno.NetAddr; close(): void } {
+    // Match http.Server._listen: trex's serve() binds inside the worker
+    // pipeline, so don't open a real socket here. TLS termination happens
+    // upstream (caddy/trex), so cert/key on `this._opts` are unused inside
+    // the worker.
+    return {
+      addr: { hostname, port, transport: "tcp" } as Deno.NetAddr,
+      close() {},
+    };
   }
 
-  this.addListener(
-    "tlsClientError",
-    function (this: any, err: any, conn: any) {
-      if (!this.emit("clientError", err, conn)) {
-        conn.destroy(err);
-      }
-    },
-  );
-
-  this.timeout = 0;
-  this.maxHeadersCount = null;
-  this.on("listening", setupConnectionsTracking);
+  // Upstream 2.9.5 added async-dispose support to https.Server. trex's
+  // ServerImpl does not define it, so keep it here rather than regress
+  // `await using server = https.createServer(...)`.
+  async [SymbolAsyncDispose]() {
+    await new Promise<void>((resolve, reject) => {
+      this.close((err?: Error) => (err ? reject(err) : resolve()));
+    });
+  }
 }
-ObjectSetPrototypeOf(Server.prototype, tls.Server.prototype);
-ObjectSetPrototypeOf(Server, tls.Server);
-
-Server.prototype.closeAllConnections = HttpServer.prototype.closeAllConnections;
-Server.prototype.closeIdleConnections =
-  HttpServer.prototype.closeIdleConnections;
-Server.prototype.setTimeout = HttpServer.prototype.setTimeout;
-
-// Same DENO_SERVE_ADDRESS override hook as http.Server, but on
-// https.Server. The override listener is plain cleartext HTTP (it
-// goes directly through _connectionListener, bypassing tls wrapping)
-// because the typical use case -- Deno Deploy / desktop runtime
-// vsock/unix control channels -- is trusted local traffic.
-Server.prototype.listen = function listen(this: any, ...args: any[]) {
-  const applied = applyAddressOverride();
-  switch (applied.mode) {
-    case "none":
-      return FunctionPrototypeApply(net.Server.prototype.listen, this, args);
-    case "tcp": {
-      let cb: any;
-      const last = args[args.length - 1];
-      if (typeof last === "function") {
-        cb = last;
-        args = ArrayPrototypeSlice(args, 0, -1);
-      }
-      const rewritten: any[] = [{ host: applied.host, port: applied.port }];
-      if (cb) ArrayPrototypePush(rewritten, cb);
-      this.once("listening", notifyAddressOverrideServing);
-      return FunctionPrototypeApply(
-        net.Server.prototype.listen,
-        this,
-        rewritten,
-      );
-    }
-    case "override-only": {
-      let cb: any;
-      const last = args[args.length - 1];
-      if (typeof last === "function") cb = last;
-      if (cb) this.once("listening", cb);
-      this._handle = {
-        close() {},
-        ref() {},
-        unref() {},
-      };
-      startOverrideListener(this, applied.override, _connectionListener);
-      nextTick(() => this.emit("listening"));
-      return this;
-    }
-    case "duplicate": {
-      startOverrideListener(this, applied.override, _connectionListener);
-      return FunctionPrototypeApply(net.Server.prototype.listen, this, args);
-    }
-  }
-};
-
-Server.prototype.close = function close(this: any) {
-  httpServerPreClose(this);
-  FunctionPrototypeApply(tls.Server.prototype.close, this, arguments);
-  return this;
-};
-
-Server.prototype[SymbolAsyncDispose] = async function (this: any) {
-  await new Promise<void>((resolve, reject) => {
-    this.close((err: any) => (err ? reject(err) : resolve()));
-  });
-};
 
 function createServer(
   opts: any,
