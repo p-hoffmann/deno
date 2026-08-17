@@ -12,7 +12,7 @@ import {
   op_module_hooks_poll_load,
   op_module_hooks_register,
   op_module_hooks_respond_load,
-  op_napi_open,
+  // op_napi_open,
   op_node_has_child_ipc_pipe,
   op_node_strip_typescript_types,
   op_require_as_file_path,
@@ -99,12 +99,6 @@ const assertStrict = core.createLazyLoader("node:assert/strict");
 const internalAsyncHooks = core.loadExtScript(
   "ext:deno_node/internal/async_hooks.ts",
 );
-const {
-  emitAfter: internalAsyncHooksEmitAfter,
-  emitBefore: internalAsyncHooksEmitBefore,
-  emitDestroy: internalAsyncHooksEmitDestroy,
-  emitInit: internalAsyncHooksEmitInit,
-} = internalAsyncHooks;
 const buffer = core.loadExtScript("ext:deno_node/internal/buffer.mjs").default;
 // child_process, crypto, dgram are lazy-loaded via `lazyNodeModules` below.
 // Their scripts use `createLazyLoader(...)()` patterns to extend classes
@@ -257,7 +251,13 @@ const lazyNodeModules = {
     core.loadExtScript("ext:deno_node/dns/promises.ts").default,
   "domain": () => core.loadExtScript("ext:deno_node/domain.ts").default,
   "fs": () => core.loadExtScript("ext:deno_node/fs.ts"),
-  "os": () => core.loadExtScript("ext:deno_node/os.ts").default,
+  // trex: route require("os") through the node:os entry point (os_esm.ts)
+  // rather than straight at the `ext:deno_node/os.ts` classic script, so the
+  // ext_os-backed uptime/userInfo overlay is installed before the module
+  // object is handed out. Mirrors how require("console") reaches
+  // console_esm.ts. Without this, a require("os") that happens before any
+  // `node:os` import hands back os.ts's synthetic fallback uptime.
+  "os": () => core.createLazyLoader("node:os")().default,
   "punycode": () => core.loadExtScript("ext:deno_node/punycode.ts").default,
   "string_decoder": () =>
     core.loadExtScript("ext:deno_node/string_decoder.ts").default,
@@ -2122,6 +2122,8 @@ function wrapSafe(
         "module",
         "__filename",
         "__dirname",
+        "global",
+        "globalThis",
       ],
     );
   }
@@ -2179,6 +2181,8 @@ Module.prototype._compile = function (
     this,
     filename,
     dirname,
+    globalThis,
+    globalThis,
   );
   if (requireDepth === 0) {
     statCache = null;
@@ -2291,35 +2295,10 @@ Module._extensions[".json"] = function (module, filename) {
   }
 };
 
-// Async hooks wrappers for NAPI - called from Rust via V8 function calls.
-function napiAsyncHooksEmitInit(asyncId, type, triggerAsyncId, resource) {
-  internalAsyncHooksEmitInit(asyncId, type, triggerAsyncId, resource);
-}
-function napiAsyncHooksEmitBefore(asyncId) {
-  internalAsyncHooksEmitBefore(asyncId);
-}
-function napiAsyncHooksEmitAfter(asyncId) {
-  internalAsyncHooksEmitAfter(asyncId);
-}
-function napiAsyncHooksEmitDestroy(asyncId) {
-  internalAsyncHooksEmitDestroy(asyncId);
-}
-
-// Native extension for .node
+// trex: native .node modules / NAPI are not supported in this runtime, so the
+// upstream loader (and its NAPI async-hooks wrappers) are intentionally dropped.
 Module._extensions[".node"] = function (module, filename) {
-  if (filename.endsWith("cpufeatures.node")) {
-    throw new Error("Using cpu-features module is currently not supported");
-  }
-  module.exports = op_napi_open(
-    filename,
-    globalThis,
-    buffer.Buffer.from,
-    reportError,
-    napiAsyncHooksEmitInit,
-    napiAsyncHooksEmitBefore,
-    napiAsyncHooksEmitAfter,
-    napiAsyncHooksEmitDestroy,
-  );
+  throw new Error("Native .node modules are not supported in this runtime");
 };
 
 function createRequireFromPath(filename, sourceURL) {
