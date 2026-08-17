@@ -27,16 +27,18 @@ import {
   Socket,
 } from "node:net";
 import { Buffer } from "node:buffer";
-import { ERR_SERVER_NOT_RUNNING } from "ext:deno_node/internal/errors.ts";
+const { ERR_SERVER_NOT_RUNNING } = core.loadExtScript(
+  "ext:deno_node/internal/errors.ts",
+);
 import { EventEmitter } from "node:events";
-import { nextTick } from "ext:deno_node/_next_tick.ts";
-import {
+const { nextTick } = core.loadExtScript("ext:deno_node/_next_tick.ts");
+const {
   validateAbortSignal,
   validateBoolean,
   validateInteger,
   validateObject,
   validatePort,
-} from "ext:deno_node/internal/validators.mjs";
+} = core.loadExtScript("ext:deno_node/internal/validators.mjs");
 import {
   addAbortSignal,
   Duplex as NodeDuplex,
@@ -54,9 +56,13 @@ import {
 } from "node:_http_outgoing";
 import { ok as assert } from "node:assert";
 import { Agent } from "node:_http_agent";
-import { kEmptyObject, once } from "ext:deno_node/internal/util.mjs";
-import { constants, TCP } from "ext:deno_node/internal_binding/tcp_wrap.ts";
-import {
+const { kEmptyObject, once } = core.loadExtScript(
+  "ext:deno_node/internal/util.mjs",
+);
+const { constants, TCP } = core.loadExtScript(
+  "ext:deno_node/internal_binding/tcp_wrap.ts",
+);
+const {
   connResetException,
   ERR_HTTP_HEADERS_SENT,
   ERR_HTTP_SOCKET_ASSIGNED,
@@ -64,8 +70,8 @@ import {
   ERR_INVALID_HTTP_TOKEN,
   ERR_INVALID_PROTOCOL,
   ERR_UNESCAPED_CHARACTERS,
-} from "ext:deno_node/internal/errors.ts";
-import { getIPFamily } from "ext:deno_node/internal/net.ts";
+} = core.loadExtScript("ext:deno_node/internal/errors.ts");
+const { getIPFamily } = core.loadExtScript("ext:deno_node/internal/net.ts");
 import { upgradeHttpRaw as defaultUpgradeHttpRaw } from "ext:deno_http/00_serve.ts";
 import { op_http_serve_address_override } from "ext:core/ops";
 import { serve } from "ext:runtime/http.js";
@@ -79,13 +85,13 @@ import {
   restoreSnapshot,
   TRACING_ENABLED,
 } from "ext:deno_telemetry/telemetry.ts";
-import {
+const {
   kDestroyed,
   kEnded,
   kEnding,
   kErrored,
   kState,
-} from "ext:deno_node/internal/streams/utils.js";
+} = core.loadExtScript("ext:deno_node/internal/streams/utils.js");
 import { deprecate } from "node:util";
 
 // Flag to track if DENO_SERVE_ADDRESS override has been consumed for Node http servers.
