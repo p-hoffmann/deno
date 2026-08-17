@@ -664,12 +664,12 @@ fn napi_get_node_version(
   let env = check_env!(env);
   check_arg!(env, result);
 
-  // Derive major/minor/patch at compile time from `deno_node::NODE_VERSION`,
+  // Derive major/minor/patch at compile time from `ext_node::NODE_VERSION`,
   // the single source of truth for the emulated Node.js version, so the value
   // reported to native addons via `napi_get_node_version()` stays in sync with
   // `process.version` / `process.versions.node`.
   const fn parse_part(part: usize) -> u32 {
-    let bytes = deno_node::NODE_VERSION.as_bytes();
+    let bytes = ext_node::NODE_VERSION.as_bytes();
     let mut seen_dots = 0;
     let mut value = 0;
     let mut i = 0;

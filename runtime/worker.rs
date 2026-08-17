@@ -41,8 +41,6 @@ use deno_fs::FileSystem;
 use deno_io::Stdio;
 use deno_kv::dynamic::MultiBackendDbHandler;
 use deno_napi::DenoRtNativeAddonLoaderRc;
-use ext_node::ExtNodeSys;
-use ext_node::NodeExtInitServices;
 use deno_os::ExitCode;
 use deno_permissions::PermissionsContainer;
 use deno_process::NpmProcessStateProviderRc;
@@ -50,6 +48,8 @@ use deno_tls::RootCertStoreProvider;
 use deno_tls::TlsKeys;
 use deno_web::BlobStoreTrait;
 use deno_web::InMemoryBroadcastChannel;
+use ext_node::ExtNodeSys;
+use ext_node::NodeExtInitServices;
 use log::debug;
 use node_resolver::InNpmPackageChecker;
 use node_resolver::NpmPackageFolderResolver;
@@ -111,7 +111,7 @@ pub fn create_validate_import_attributes_callback(
       let op_state = JsRuntime::op_state_from(&*scope);
       if let Ok(op_state) = op_state.try_borrow()
         && let Some(registry) = op_state
-          .try_borrow::<deno_node::ops::module_hooks::LoaderHookRegistry>(
+          .try_borrow::<ext_node::ops::module_hooks::LoaderHookRegistry>(
         )
         && registry.hooks_active.get()
       {

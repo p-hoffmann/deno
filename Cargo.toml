@@ -130,7 +130,8 @@ deno_io = { version = "0.167.0", path = "./ext/io" }
 deno_kv = { version = "0.165.0", path = "./ext/kv" }
 deno_napi = { version = "0.188.0", path = "./ext/napi" }
 deno_net = { version = "0.249.0", path = "./ext/net" }
-deno_node = { version = "0.195.0", path = "./ext/node" }
+# trex: ext/node renamed deno_node -> ext_node (local 0.1.0).
+ext_node = { version = "0.1.0", path = "./ext/node" }
 deno_node_crypto = { version = "0.27.0", path = "./ext/node_crypto" }
 deno_node_sqlite = { version = "0.27.0", path = "./ext/node_sqlite" }
 deno_os = { version = "0.74.0", path = "./ext/os" }
@@ -563,7 +564,7 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.deno_net]
 opt-level = 3
-[profile.release.package.deno_node]
+[profile.release.package.ext_node]
 opt-level = 3
 [profile.release.package.deno_runtime]
 opt-level = 3

@@ -61,7 +61,7 @@ pub const UNSTABLE_FEATURE_NAME: &str = "worker-options";
 /// (`--stack-size`, 1MB by default), so a raised `--stack-size` overflows the
 /// OS stack and aborts the process instead of raising `RangeError`.
 const DEFAULT_WORKER_STACK_SIZE_MB: usize =
-  deno_node::ops::worker_threads::DEFAULT_STACK_SIZE_MB;
+  ext_node::ops::worker_threads::DEFAULT_STACK_SIZE_MB;
 
 /// V8 resource limits for worker isolates, matching Node.js `resourceLimits`.
 #[derive(FromV8, Default, Clone)]

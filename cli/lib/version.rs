@@ -24,7 +24,7 @@ pub const DENO_VERSION: &str = env!("DENO_VERSION");
 /// Re-exported from `ext/node`, which is the single source of truth shared with
 /// the `process.version` polyfill, so the engines check and the reported value
 /// can never drift.
-pub use deno_node::NODE_VERSION;
+pub use ext_node::NODE_VERSION;
 // TODO(bartlomieju): ideally we could remove this const.
 const IS_CANARY: bool = option_env!("DENO_CANARY").is_some();
 // TODO(bartlomieju): this is temporary, to allow Homebrew to cut RC releases as well

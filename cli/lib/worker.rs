@@ -9,8 +9,6 @@ use boxed_error::Boxed;
 use deno_bundle_runtime::BundleProvider;
 use deno_core::ModuleSpecifier;
 use deno_core::error::JsError;
-use deno_node::NodeRequireLoaderRc;
-use deno_node::ops::ipc::ChildIpcSerialization;
 use deno_path_util::url_from_file_path;
 use deno_path_util::url_to_file_path;
 use deno_resolver::npm::DenoInNpmPackageChecker;
@@ -52,6 +50,8 @@ use deno_runtime::web_worker::WebWorkerServiceOptions;
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 use deno_runtime::worker::WorkerServiceOptions;
+use ext_node::NodeRequireLoaderRc;
+use ext_node::ops::ipc::ChildIpcSerialization;
 use node_resolver::UrlOrPath;
 use node_resolver::errors::ResolvePkgJsonBinExportError;
 use url::Url;
@@ -452,7 +452,7 @@ impl<TSys: DenoLibSys> LibWorkerFactorySharedState<TSys> {
         // unspecified fields), matching Node.js behavior.
         // Note: integer division truncates sub-MB fractions, which is fine
         // since V8 and Node.js both work in whole-MB granularity here.
-        let resolved = deno_node::ops::worker_threads::ResolvedResourceLimits {
+        let resolved = ext_node::ops::worker_threads::ResolvedResourceLimits {
           max_young_generation_size_mb: params
             .max_young_generation_size_in_bytes()
             / mb,
@@ -461,7 +461,7 @@ impl<TSys: DenoLibSys> LibWorkerFactorySharedState<TSys> {
           code_range_size_mb: params.code_range_size_in_bytes() / mb,
           stack_size_mb: limits
             .stack_size_mb
-            .unwrap_or(deno_node::ops::worker_threads::DEFAULT_STACK_SIZE_MB),
+            .unwrap_or(ext_node::ops::worker_threads::DEFAULT_STACK_SIZE_MB),
         };
 
         (Some(params), Some(resolved))

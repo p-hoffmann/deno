@@ -39,7 +39,7 @@ pub fn maybe_transpile_and_minify_source(
 
 /// The `node:process` polyfill carries a `__NODE_VERSION__` placeholder so the
 /// reported `process.version` / `process.versions.node` stays bound to the
-/// single source of truth in `deno_node::NODE_VERSION` instead of duplicating
+/// single source of truth in `ext_node::NODE_VERSION` instead of duplicating
 /// the literal. Substitute it here, at snapshot build time, so the value is
 /// baked into the snapshot and no runtime work is needed.
 fn maybe_substitute_node_version(
@@ -56,7 +56,7 @@ fn maybe_substitute_node_version(
   );
   source
     .as_str()
-    .replace(TOKEN, deno_node::NODE_VERSION)
+    .replace(TOKEN, ext_node::NODE_VERSION)
     .into()
 }
 
