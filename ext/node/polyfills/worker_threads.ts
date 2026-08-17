@@ -2,13 +2,15 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 
 import { core, internals, primordials } from "ext:core/mod.js";
-import {
+const {
   MessageChannel,
   MessagePort,
   unrefParentPort,
-} from "ext:deno_web/13_message_port.js";
-import { BroadcastChannel } from "ext:deno_web/01_broadcast_channel.js";
-import { notImplemented } from "ext:deno_node/_utils.ts";
+} = core.loadExtScript("ext:deno_web/13_message_port.js");
+const { BroadcastChannel } = core.loadExtScript(
+  "ext:deno_web/01_broadcast_channel.js",
+);
+const { notImplemented } = core.loadExtScript("ext:deno_node/_utils.ts");
 import { EventEmitter } from "node:events";
 import process from "node:process";
 
