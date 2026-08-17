@@ -215,9 +215,12 @@ const util = core.loadExtScript("ext:deno_node/util.ts");
 // / `internals.__isWorkerThread`, which the node process bootstrap calls
 // (`__initWorkerThreads` at startup). It also statically imports node:vm, so
 // vm stays in the snapshot regardless.
-const workerThreads = core.loadExtScript(
-  "ext:deno_node/worker_threads.ts",
-);
+// trex: worker_threads.ts is now registered as `lazy_loaded_esm`
+// ("node:worker_threads" in ext/node/lib.rs), not as a classic
+// `lazy_loaded_js` script, so it is reached through the module map rather
+// than `loadExtScript`. Calling the loader here keeps it eager, which the
+// note above requires.
+const workerThreads = core.createLazyLoader("node:worker_threads")().default;
 // zlib is lazy-loaded via `lazyNodeModules` below: zlib.js extends
 // `Transform` from `node:stream` at module body, so loading it eagerly
 // pulls the stream subtree into the snapshot.

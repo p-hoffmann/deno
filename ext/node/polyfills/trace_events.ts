@@ -51,7 +51,7 @@ let _wtExports = null;
 function getWorkerThreadsExports() {
   if (_wtExports !== null) return _wtExports;
   try {
-    _wtExports = core.loadExtScript("ext:deno_node/worker_threads.ts");
+    _wtExports = core.createLazyLoader("node:worker_threads")();
   } catch {
     _wtExports = {};
   }

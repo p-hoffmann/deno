@@ -556,6 +556,11 @@ deno_core::extension!(deno_node,
     "node:util/types" = "util/types.ts",
     "node:vm" = "vm_esm.js",
     "node:wasi" = "wasi_esm.ts",
+    // trex: worker_threads.ts is replaced wholesale by the fork with an ESM
+    // module (in-process worker emulation). Upstream registers it as a
+    // classic `lazy_loaded_js` script fronted by `synthetic_esm`; the fork
+    // file is a real ESM module, so it belongs in `lazy_loaded_esm`.
+    "node:worker_threads" = "worker_threads.ts",
     "node:sqlite" = "sqlite_esm.ts",
     "node:os" = "os_esm.ts",
     "node:stream/consumers" = "stream/consumers_esm.js",
@@ -608,7 +613,6 @@ deno_core::extension!(deno_node,
     "tty.js",
     "url.ts",
     "v8.ts",
-    "worker_threads.ts",
     "zlib.js",
     "child_process.ts",
     "fs.ts",
@@ -801,7 +805,6 @@ deno_core::extension!(deno_node,
   synthetic_esm = [
     "node:url" = "ext:deno_node/url.ts",
     "node:util" = "ext:deno_node/util.ts",
-    "node:worker_threads" = "ext:deno_node/worker_threads.ts",
     "node:zlib" = "ext:deno_node/zlib.js",
   ],
   options = {
