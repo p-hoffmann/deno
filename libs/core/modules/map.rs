@@ -1408,13 +1408,29 @@ impl ModuleMap {
       .filter(|name| is_internal_module_specifier(name))
       .map(|_| LoadingInternalModulesGuard::new(self));
 
+    // The `*const Self` slot is how the V8 resolve/source callbacks below
+    // recover a `&Self`. Instantiation can re-enter this function (a
+    // `synthetic_esm` resolve evaluates an ext script, which may lazily load
+    // and instantiate another ES module), so the slot has to be saved and
+    // restored rather than unconditionally removed: an inner instantiation
+    // that removed the slot on its way out would leave the outer one's
+    // callbacks with nothing to read, and `module_resolve_callback` would
+    // panic on `get_slot().unwrap()`.
+    let previous_slot = tc_scope.get_slot::<*const Self>().copied();
     tc_scope.set_slot(self as *const _);
     let instantiate_result = module.instantiate_module2(
       tc_scope,
       Self::module_resolve_callback,
       Self::module_source_callback,
     );
-    tc_scope.remove_slot::<*const Self>();
+    match previous_slot {
+      Some(previous) => {
+        tc_scope.set_slot(previous);
+      }
+      None => {
+        tc_scope.remove_slot::<*const Self>();
+      }
+    }
     if instantiate_result.is_none() {
       let exception = tc_scope.exception().unwrap();
       return Err(v8::Global::new(tc_scope, exception));
