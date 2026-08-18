@@ -37,16 +37,16 @@ const { validateIntegerRange } = core.loadExtScript(
   "ext:deno_node/_utils.ts",
 );
 // trex: `ext:os/os.js` (ext_os) is registered as a real `esm` module, not
-// `lazy_loaded_js`, so it can't be reached from here via `loadExtScript` —
+// `lazy_loaded_js`, so it can't be reached from here via `loadExtScript` -
 // this file is loaded as a classic script (see `ext/node/lib.rs`'s
 // `lazy_loaded_js` list) and classic scripts can't use a static `import`
 // either. `os_esm.ts` (a real ESM module) statically imports `osCalls`
 // from `ext:os/os.js` and overrides `uptime`/`userInfo` with the
 // canonical ext_os-backed values for the primary `node:os` entry point.
 // The synthetic values below (matching ext_os/os.js's own constants) keep
-// this file's own `uptime`/`userInfo` — reachable via
+// this file's own `uptime`/`userInfo` - reachable via
 // `require("os")` in `01_require.js`, which loads this file directly
-// without going through `os_esm.ts` — from leaking real host identity.
+// without going through `os_esm.ts` - from leaking real host identity.
 const osStartTime = Date.now();
 
 const {
@@ -85,7 +85,7 @@ machine[SymbolToPrimitive] = () => machine();
 tmpdir[SymbolToPrimitive] = () => tmpdir();
 
 function cpus() {
-  // trex: sandboxed — report a single synthetic core instead of the host's.
+  // trex: sandboxed - report a single synthetic core instead of the host's.
   return [{
     model: "",
     speed: 0,
@@ -124,7 +124,7 @@ function getPriority(pid = 0) {
 }
 
 function homedir() {
-  // trex: sandboxed — fixed path instead of the host's home directory.
+  // trex: sandboxed - fixed path instead of the host's home directory.
   return "/home/deno";
 }
 
@@ -250,7 +250,7 @@ function type() {
 }
 
 function uptime() {
-  // trex: sandboxed — synthetic uptime, not the host's (see os_esm.ts for
+  // trex: sandboxed - synthetic uptime, not the host's (see os_esm.ts for
   // the canonical ext_os-backed value used by the `node:os` entry point).
   return Math.floor(Math.abs(Date.now() - osStartTime) / 1000);
 }
@@ -258,7 +258,7 @@ function uptime() {
 function userInfo(
   options = { __proto__: null, encoding: "utf-8" },
 ) {
-  // trex: sandboxed — synthetic identity (matches ext_os/os.js's osCalls
+  // trex: sandboxed - synthetic identity (matches ext_os/os.js's osCalls
   // constants), no host passwd lookup.
   return {
     uid: 1000,

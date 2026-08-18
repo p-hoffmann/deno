@@ -2,7 +2,7 @@
 import { core } from "ext:core/mod.js";
 // trex: `ext:deno_node/os.ts` is a classic script (`lazy_loaded_js`), so
 // it can't statically `import` `ext:os/os.js` (ext_os is registered as a
-// real `esm` module, not `lazy_loaded_js` — `loadExtScript` can only reach
+// real `esm` module, not `lazy_loaded_js` - `loadExtScript` can only reach
 // `lazy_loaded_js` sources). This file *is* a real ESM module, so the
 // sandboxed-identity import goes here instead, and overlays the
 // canonical ext_os-backed `uptime`/`userInfo` onto the shared
