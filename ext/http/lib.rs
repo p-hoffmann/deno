@@ -95,7 +95,12 @@ use crate::response_body::brotli_compressor;
 pub mod compressible;
 mod fly_accept_encoding;
 mod http_next;
-mod network_buffered_stream;
+// Made `pub` for embedders: `serve_http_on` wraps the embedder's IO in a
+// `NetworkBufferedStream` before handing it to hyper, so the concrete type
+// behind an upgraded connection is `TokioIo<NetworkBufferedStream<S>>`.
+// Embedders need to name that type to downcast an upgrade back to their own
+// stream. Visibility only: no behaviour change.
+pub mod network_buffered_stream;
 mod reader_stream;
 mod request_body;
 mod request_properties;
