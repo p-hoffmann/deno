@@ -115,6 +115,8 @@ let nodeHttpAddressOverrideConsumed = false;
 const { internalRidSymbol } = core;
 const {
   ArrayIsArray,
+  ArrayPrototypePush,
+  ObjectDefineProperty,
   StringPrototypeIncludes,
   StringPrototypeToLowerCase,
   SafeArrayIterator,
@@ -1045,6 +1047,50 @@ export class ServerImpl extends EventEmitter {
         request.headers.get("connection")?.toLowerCase().includes("upgrade") &&
         request.headers.get("upgrade");
       req[kRawHeaders] = request.headers;
+      // trex/edge-runtime: embedder servers (e.g. express via
+      // http.createServer().listen()) re-parent this request with
+      // `Object.setPrototypeOf(req, app.request)`, which removes
+      // IncomingMessageForServer.prototype's `headers`/`rawHeaders` getters from
+      // the chain. After that, `req.headers` resolves through node:http's
+      // IncomingMessage (_http_incoming.js), whose getter reads `this.rawHeaders`
+      // + the private `kHeadersCount` symbol - neither of which exist on this
+      // instance - so `req.headers` comes back empty. (In the pre-2.7.14
+      // monolithic stack the server and node:http IncomingMessage were the same
+      // class, so re-parenting was harmless.) Materialize `headers`/`rawHeaders`
+      // as own data properties so they survive re-parenting and shadow any
+      // prototype getter regardless of which IncomingMessage class is in scope.
+      {
+        const entries = headersEntries(request.headers);
+        const rawHeaders = [];
+        const headers = { __proto__: null };
+        for (let i = 0; i < entries.length; i++) {
+          const name = entries[i][0];
+          const value = entries[i][1];
+          ArrayPrototypePush(rawHeaders, name, value);
+          if (name === "set-cookie") {
+            if (headers[name] === undefined) headers[name] = [value];
+            else ArrayPrototypePush(headers[name], value);
+          } else if (headers[name] === undefined) {
+            headers[name] = value;
+          } else {
+            headers[name] += ", " + value;
+          }
+        }
+        ObjectDefineProperty(req, "headers", {
+          __proto__: null,
+          value: headers,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+        ObjectDefineProperty(req, "rawHeaders", {
+          __proto__: null,
+          value: rawHeaders,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      }
 
       // Don't fire the "upgrade" event for h2c (HTTP/2 cleartext) upgrades.
       // These are protocol-level upgrades that aren't meant for user-space
