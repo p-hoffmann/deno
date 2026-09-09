@@ -2599,12 +2599,13 @@ Deno.test(
   },
 );
 
-// Regression test for https://github.com/denoland/deno/issues/20548
-// `content-encoding` and `content-length` response headers must stay visible
-// when the body is transparently decompressed; only the body is decoded.
+// A transparently decompressed body is handed to JS decoded, so the
+// `content-encoding` that described the wire body must not stay on the
+// response: code that copies those headers onto a response of its own (the
+// shape of every proxy) would otherwise label decoded bytes as gzip.
 Deno.test(
   { permissions: { net: true } },
-  async function fetchPreservesContentEncodingHeader() {
+  async function fetchStripsContentEncodingHeaderOfDecodedBody() {
     const compressed = await new Response(
       new Blob(["hello world"]).stream().pipeThrough(
         new CompressionStream("gzip"),
@@ -2623,11 +2624,8 @@ Deno.test(
     );
     try {
       const resp = await fetch(`http://localhost:${listenPort}/`);
-      assertEquals(resp.headers.get("content-encoding"), "gzip");
-      assertEquals(
-        resp.headers.get("content-length"),
-        String(compressed.length),
-      );
+      assertEquals(resp.headers.get("content-encoding"), null);
+      assertEquals(resp.headers.get("content-length"), null);
       assertEquals(await resp.text(), "hello world");
     } finally {
       ac.abort();
@@ -2636,11 +2634,8 @@ Deno.test(
   },
 );
 
-// The flip side of the regression test above: when a fetch response with a
-// transparently decompressed body is re-serialized by an HTTP server
-// (`return fetch(...)` proxying), the retained `content-encoding` and
-// `content-length` headers describe the original wire body, not the decoded
-// one, and must not be forwarded with it.
+// The same, one hop further out: a server that hands a fetched response
+// straight back must not re-emit the wire `content-encoding` either.
 Deno.test(
   { permissions: { net: true } },
   async function fetchProxyingDecompressedResponseStripsWireHeaders() {

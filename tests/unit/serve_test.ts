@@ -3765,15 +3765,10 @@ for (const testCase of compressionTestCases) {
               testCase.out["Content-Encoding"] || null,
             );
           } else if (testCase.expect == "gzip" || testCase.expect == "br") {
-            // The fetch will transparently decompress this response. Per the
-            // fetch spec the `content-encoding` header stays visible;
-            // `content-length` is absent because the server streams the
-            // compressed body with chunked transfer encoding.
+            // Note the fetch will transparently decompress this response, BUT we can detect that a response
+            // was compressed by the lack of a content length.
             assertEquals(body.byteLength, testCase.length);
-            assertEquals(
-              resp.headers.get("content-encoding"),
-              testCase.expect,
-            );
+            assertEquals(resp.headers.get("content-encoding"), null);
             assertEquals(resp.headers.get("content-length"), null);
           }
         } finally {

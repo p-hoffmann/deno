@@ -80,6 +80,7 @@ use http::header::HeaderName;
 use http::header::HeaderValue;
 use http::header::PROXY_AUTHORIZATION;
 use http::header::RANGE;
+use http::header::TRANSFER_ENCODING;
 use http::header::USER_AGENT;
 use http_body_util::BodyDataStream;
 use http_body_util::BodyExt;
@@ -1249,7 +1250,7 @@ where
 }
 
 fn decompress_response(
-  resp: http::Response<Incoming>,
+  mut resp: http::Response<Incoming>,
   skip_decompression: bool,
 ) -> http::Response<ResBody> {
   if skip_decompression {
@@ -1265,6 +1266,9 @@ fn decompress_response(
     .and_then(|v| v.parse::<u64>().ok())
     == Some(0);
   if is_empty {
+    // The body handed to the caller carries no coding, so neither may the
+    // header. See the note in `decode_response`.
+    resp.headers_mut().remove(CONTENT_ENCODING);
     return resp.map(box_raw_body);
   }
 
@@ -1309,12 +1313,25 @@ fn decode_response(
   resp: http::Response<Incoming>,
   kind: DecodeKind,
 ) -> http::Response<ResBody> {
-  // Per the fetch spec, handling content codings only decodes the body; the
-  // header list keeps `Content-Encoding` and `Content-Length` as received
-  // (the latter describes the encoded body, not the decoded one). See
-  // https://github.com/denoland/deno/issues/20548.
+  // NOTE(trex): upstream #35124 stopped removing these headers, so that
+  // `Response.headers` reports the response exactly as it came off the wire
+  // (what the fetch spec, browsers and undici do). Deno's own servers then
+  // drop them again at the point of re-serialization, via `wireHeaderList`.
+  //
+  // That only covers responses handed straight back to the server. trex's
+  // proxies copy the headers of a fetched response onto a response of their
+  // own, so the stale `Content-Encoding` reached the wire in front of an
+  // already-decoded body and every client rejected it as a corrupt gzip
+  // stream. Removing the headers here — the behaviour up to Deno 2.8, when
+  // decompression was `tower_http`'s and it stripped them — keeps the header
+  // list describing the body that is actually attached to it.
+  //
+  // `BodyDecoded` stays for `wireHeaderList`, which is then a no-op.
   let (mut parts, body) = resp.into_parts();
   parts.extensions.insert(BodyDecoded);
+  parts.headers.remove(CONTENT_ENCODING);
+  parts.headers.remove(CONTENT_LENGTH);
+  parts.headers.remove(TRANSFER_ENCODING);
 
   let stream = BodyDataStream::new(
     body.map_err(|err| std::io::Error::other(err.to_string())),
