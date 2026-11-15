@@ -1588,6 +1588,10 @@ const buildJobs = buildItems.map((rawBuildItem) => {
             "cargo check --target wasm32-unknown-unknown -p deno_npm_installer",
         },
         {
+          name: "Cargo check (deno_resolver sync)",
+          run: "cargo check -p deno_resolver --features sync",
+        },
+        {
           name: "Cargo check (deno_config)",
           run: [
             "cargo check --no-default-features -p deno_config",
