@@ -226,12 +226,17 @@ pub struct ArenaSharedAtomic<T> {
   ptr: NonNull<ArenaSharedAtomicData<T>>,
 }
 
-unsafe impl<T> Send for ArenaSharedAtomic<T> {}
+// The arena sits behind a raw pointer, so auto traits can't infer this.
+// Require `T: Send` so a `T` never crosses threads with the arena.
+unsafe impl<T: Send> Send for ArenaSharedAtomic<T> {}
 
 // The arena itself may not be shared so that we can guarantee all [`RawArena`]
 // access happens on the owning thread.
 static_assertions::assert_impl_any!(ArenaSharedAtomic<()>: Send);
 static_assertions::assert_not_impl_any!(ArenaSharedAtomic<()>: Sync);
+static_assertions::assert_not_impl_any!(
+  ArenaSharedAtomic<std::rc::Rc<()>>: Send, Sync
+);
 
 /// Data structure containing a mutex and the `RawArena` for atomic access in the `ArenaSharedAtomic`.
 struct ArenaSharedAtomicData<T> {
