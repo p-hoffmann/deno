@@ -739,6 +739,42 @@ fn test_cached_synthetic_esm_evaluation_allows_dynamic_import() {
     .unwrap();
 }
 
+/// Resolving a `synthetic_esm` import during instantiation evaluates its
+/// backing script, which can instantiate another module re-entrantly. The
+/// outer instantiation must still be able to resolve its remaining imports
+/// afterwards instead of panicking on a missing module map slot.
+#[test]
+fn test_synthetic_esm_reentrant_instantiation() {
+  deno_core::extension!(
+    test_ext,
+    lazy_loaded_esm = [
+      dir "modules/testdata",
+      "custom:outer" = "synthetic_esm_reentry_outer.js",
+      "custom:inner" = "synthetic_esm_reentry_inner.js",
+      "custom:peer" = "synthetic_esm_reentry_peer.js",
+    ],
+    lazy_loaded_js = [dir "modules/testdata", "synthetic_esm_reentry_backing.js"],
+    synthetic_esm = [
+      "custom:synth" = "ext:test_ext/synthetic_esm_reentry_backing.js",
+    ],
+  );
+
+  let mut runtime = JsRuntime::new(RuntimeOptions {
+    extensions: vec![test_ext::init()],
+    ..Default::default()
+  });
+
+  runtime
+    .execute_script(
+      "test_synthetic_esm_reentry.js",
+      r#"
+      const { value } = Deno.core.createLazyLoader("custom:outer")();
+      if (value !== "ab") throw new Error("expected 'ab', got: " + value);
+      "#,
+    )
+    .unwrap();
+}
+
 /// Regression test for https://github.com/denoland/deno/issues/34307
 ///
 /// Two concurrent dynamic `import()` calls each spawn their own

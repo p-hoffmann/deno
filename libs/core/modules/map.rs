@@ -1203,13 +1203,22 @@ impl ModuleMap {
     let _loading_internal_modules_guard =
       is_internal.then(|| LoadingInternalModulesGuard::new(self));
 
+    // Instantiation can re-enter this function: resolving a `synthetic_esm`
+    // import evaluates its backing script, which may lazy-load and
+    // instantiate another module. Restore the outer call's slot rather than
+    // removing it, or the outer resolve callbacks find it empty.
+    let previous_slot = tc_scope.get_slot::<*const Self>().copied();
     tc_scope.set_slot(self as *const _);
     let instantiate_result = module.instantiate_module2(
       tc_scope,
       Self::module_resolve_callback,
       Self::module_source_callback,
     );
-    tc_scope.remove_slot::<*const Self>();
+    if let Some(previous) = previous_slot {
+      tc_scope.set_slot(previous);
+    } else {
+      tc_scope.remove_slot::<*const Self>();
+    }
     if instantiate_result.is_none() {
       let exception = tc_scope.exception().unwrap();
       return Err(v8::Global::new(tc_scope, exception));
