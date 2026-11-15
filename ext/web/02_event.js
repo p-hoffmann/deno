@@ -19,6 +19,7 @@ const {
   Error,
   FunctionPrototypeCall,
   JSONStringify,
+  MapPrototypeDelete,
   MapPrototypeGet,
   MapPrototypeSet,
   ObjectCreate,
@@ -1619,9 +1620,9 @@ function makeWrappedHandler(handler, isSpecialErrorEventHandler) {
   return wrappedHandler;
 }
 
-// `init` is an optional function that will be called the first time that the
-// event handler property is set. It will be called with the object on which
-// the property is set as its argument.
+// `init` is an optional function that will be called whenever the event
+// handler goes from unset (or null) to a value. It will be called with the
+// object on which the property is set as its argument.
 // `isSpecialErrorEventHandler` can be set to true to opt into the special
 // behavior of event handlers for the "error" event in a global scope.
 function defineEventHandler(
@@ -1652,17 +1653,25 @@ function defineEventHandler(
         this[_eventHandlers] = new SafeMap();
       }
       let handlerWrapper = MapPrototypeGet(this[_eventHandlers], name);
-      if (handlerWrapper) {
+      if (value === null) {
+        // Deactivating removes the listener, so it no longer keeps e.g. an
+        // AbortSignal.timeout() timer alive, and a later activation appends
+        // a fresh listener at the end of the list.
+        if (handlerWrapper) {
+          MapPrototypeDelete(this[_eventHandlers], name);
+          this.removeEventListener(name, handlerWrapper);
+        }
+      } else if (handlerWrapper) {
         handlerWrapper.handler = value;
-      } else if (value !== null) {
+      } else {
         handlerWrapper = makeWrappedHandler(
           value,
           isSpecialErrorEventHandler,
         );
+        MapPrototypeSet(this[_eventHandlers], name, handlerWrapper);
         this.addEventListener(name, handlerWrapper);
         init?.(this);
       }
-      MapPrototypeSet(this[_eventHandlers], name, handlerWrapper);
     },
     configurable: true,
     enumerable: true,
