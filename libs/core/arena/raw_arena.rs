@@ -59,11 +59,13 @@ pub struct RawArena<T> {
   capacity: usize,
 }
 
-/// The [`RawArena`] is [`Send`], but not [`Sync`].
-unsafe impl<T> Send for RawArena<T> {}
+/// The [`RawArena`] is [`Send`] if `T` is, but never [`Sync`].
+// Live entries are dropped with the arena, so moving it moves the `T`s too.
+unsafe impl<T: Send> Send for RawArena<T> {}
 
 static_assertions::assert_impl_one!(RawArena<()>: Send);
 static_assertions::assert_not_impl_any!(RawArena<()>: Sync);
+static_assertions::assert_not_impl_any!(RawArena<std::rc::Rc<()>>: Send, Sync);
 
 union RawArenaEntry<T> {
   /// If this is a vacant entry, points to the next entry.
