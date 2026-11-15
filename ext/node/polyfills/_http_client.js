@@ -1003,8 +1003,9 @@ function ondrain() {
 }
 
 function canRetryRequest(req) {
-  return req.reusedSocket && !req.res && req.agent && !req._retrying &&
-    req[kRetryData] !== null;
+  // A request the caller destroyed must never be resent on a new socket.
+  return !req.destroyed && req.reusedSocket && !req.res && req.agent &&
+    !req._retrying && req[kRetryData] !== null;
 }
 
 function getRetryDataSize(data, encoding) {
