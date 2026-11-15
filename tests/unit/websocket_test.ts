@@ -542,6 +542,60 @@ Deno.test("invalid server", async () => {
   await promise;
 });
 
+// https://github.com/denoland/deno/issues/37147
+Deno.test("close event has code 1006 when connecting fails", async () => {
+  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const { port } = listener.addr;
+  listener.close();
+
+  const { promise, resolve } = Promise.withResolvers<CloseEvent>();
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  ws.onopen = () => fail();
+  ws.onclose = (e) => resolve(e);
+  const event = await promise;
+  assertEquals(event.code, 1006);
+  assertEquals(event.reason, "");
+  assertEquals(event.wasClean, false);
+});
+
+// https://github.com/denoland/deno/issues/37147
+Deno.test(
+  "close event has code 1006 when the connection drops without a close frame",
+  async () => {
+    const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+    const server = (async () => {
+      const conn = await listener.accept();
+      const buf = new Uint8Array(4096);
+      const n = await conn.read(buf);
+      const request = new TextDecoder().decode(buf.subarray(0, n!));
+      const key = request.match(/Sec-WebSocket-Key: (.*)\r\n/i)![1].trim();
+      const digest = await crypto.subtle.digest(
+        "SHA-1",
+        new TextEncoder().encode(key + "258EAFA5-E914-47A5-95CA-C5AB0DC85B11"),
+      );
+      const accept = btoa(String.fromCharCode(...new Uint8Array(digest)));
+      await conn.write(
+        new TextEncoder().encode(
+          "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n" +
+            `Connection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
+        ),
+      );
+      conn.close();
+    })();
+
+    const { promise, resolve } = Promise.withResolvers<CloseEvent>();
+    const ws = new WebSocket(`ws://127.0.0.1:${listener.addr.port}`);
+    ws.onclose = (e) => resolve(e);
+    const event = await promise;
+    assertEquals(event.code, 1006);
+    assertEquals(event.reason, "");
+    assertEquals(event.wasClean, false);
+
+    await server;
+    listener.close();
+  },
+);
+
 Deno.test("connect & close", async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   const ws = new WebSocket("ws://localhost:4242");
